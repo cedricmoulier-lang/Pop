@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portions de poisson</title>
+<meta name="description" content="Calculez la quantité de poisson à acheter par personne et par repas, selon la découpe, le type de repas et les convives.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+  :root {
+    --bg: #f2f5f4;
+    --surface: #ffffff;
+    --surface-2: #e7edeb;
+    --ink: #142129;
+    --ink-2: #4c5c64;
+    --ink-3: #7b8a91;
+    --line: #d3dcda;
+    --accent: #0f6e77;
+    --accent-ink: #ffffff;
+    --accent-soft: #d9ecec;
+    --focus: #2c9aa3;
+    --result-bg: #142129;
+    --result-ink: #f2f5f4;
+    --result-muted: #9fb0b6;
+    --result-accent: #6fcbd0;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e171b;
+      --surface: #152229;
+      --surface-2: #1c2c34;
+      --ink: #e6eef0;
+      --ink-2: #aebbc1;
+      --ink-3: #7d8d94;
+      --line: #2a3b43;
+      --accent: #4fb3bb;
+      --accent-ink: #0b1519;
+      --accent-soft: #163a3f;
+      --focus: #7fd3d9;
+      --result-bg: #f2f5f4;
+      --result-ink: #142129;
+      --result-muted: #5d6d74;
+      --result-accent: #0f6e77;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e171b;
+    --surface: #152229;
+    --surface-2: #1c2c34;
+    --ink: #e6eef0;
+    --ink-2: #aebbc1;
+    --ink-3: #7d8d94;
+    --line: #2a3b43;
+    --accent: #4fb3bb;
+    --accent-ink: #0b1519;
+    --accent-soft: #163a3f;
+    --focus: #7fd3d9;
+    --result-bg: #f2f5f4;
+    --result-ink: #142129;
+    --result-muted: #5d6d74;
+    --result-accent: #0f6e77;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { font-size: 16px; }
+  body {
+    margin: 0;
+    padding-block: 2.5rem 4rem;
+    padding-inline: clamp(16px, 4vw, 40px);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+    line-height: 1.5;
+  }
+  h1, h2, h3 { font-family: "Fraunces", Georgia, "Times New Roman", serif; text-wrap: balance; margin: 0; }
+  .wrap { max-width: 1040px; margin-inline: auto; }
+
+  header { margin-bottom: 2rem; max-width: 40rem; }
+  .eyebrow {
+    font-size: .78rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; margin: 0 0 .5rem;
+  }
+  h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 600; line-height: 1.05; font-variation-settings: "opsz" 144; }
+  header p { color: var(--ink-2); margin: .9rem 0 0; font-size: 1.05rem; max-width: 36rem; }
+
+  .app {
+    display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 1.5rem;
+    align-items: start;
+  }
+  @media (max-width: 760px) { .app { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 1.5rem;
+  }
+  fieldset { border: 0; padding: 0; margin: 0 0 1.5rem; min-width: 0; }
+  fieldset:last-child { margin-bottom: 0; }
+  legend {
+    padding: 0; margin-bottom: .6rem; font-weight: 600; font-size: .95rem; color: var(--ink);
+  }
+  legend small { font-weight: 400; color: var(--ink-3); }
+
+  .choices { display: grid; gap: .5rem; }
+  .choice {
+    display: grid; grid-template-columns: auto 1fr auto; gap: .75rem; align-items: baseline;
+    padding: .6rem .8rem; border: 1px solid var(--line); border-radius: 8px;
+    cursor: pointer; background: var(--surface);
+  }
+  .choice:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+  .choice:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .choice input { margin: 0; align-self: center; accent-color: var(--accent); }
+  .choice .lbl { font-weight: 600; }
+  .choice .sub { display: block; font-weight: 400; color: var(--ink-2); font-size: .9rem; }
+  .choice .g { font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: .9rem; white-space: nowrap; }
+
+  .seg { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .seg label {
+    flex: 1 1 8rem; text-align: center; padding: .55rem .8rem; border: 1px solid var(--line);
+    border-radius: 8px; cursor: pointer; font-weight: 600;
+  }
+  .seg label:has(input:checked) { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .seg label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .seg input { position: absolute; opacity: 0; width: 0; height: 0; }
+
+  .counts { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .count { display: grid; gap: .3rem; }
+  .count label { font-weight: 600; font-size: .95rem; }
+  .count label small { display: block; font-weight: 400; color: var(--ink-3); }
+  .stepper { display: grid; grid-template-columns: 2.5rem 1fr 2.5rem; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .stepper button {
+    border: 0; background: var(--surface-2); color: var(--ink); font-size: 1.2rem; cursor: pointer; font-family: inherit;
+  }
+  .stepper button:hover { background: var(--accent-soft); }
+  .stepper button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+  .stepper input {
+    border: 0; text-align: center; font: inherit; font-size: 1.1rem; font-weight: 600; font-variant-numeric: tabular-nums;
+    background: var(--surface); color: var(--ink); min-width: 0; width: 100%; padding: .5rem 0;
+    -moz-appearance: textfield;
+  }
+  .stepper input::-webkit-outer-spin-button, .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .stepper input:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+  .result {
+    background: var(--result-bg); color: var(--result-ink); border-radius: 12px; padding: 1.5rem;
+    display: grid; gap: 1.25rem; position: sticky; top: 1rem;
+  }
+  .result .eyebrow { color: var(--result-accent); }
+  .big { font-family: "Fraunces", Georgia, serif; font-variation-settings: "opsz" 144; line-height: 1; }
+  .big .n { font-size: clamp(3rem, 8vw, 4.5rem); font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .big .u { font-size: 1.4rem; color: var(--result-muted); margin-left: .25rem; }
+  .result .desc { color: var(--result-muted); margin: .4rem 0 0; font-size: .95rem; }
+  .breakdown { display: grid; gap: .45rem; border-top: 1px solid color-mix(in srgb, var(--result-muted) 35%, transparent); padding-top: 1rem; margin: 0; }
+  .breakdown div { display: flex; justify-content: space-between; gap: 1rem; font-size: .95rem; }
+  .breakdown dt { color: var(--result-muted); }
+  .breakdown dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .buy { border-top: 1px solid color-mix(in srgb, var(--result-muted) 35%, transparent); padding-top: 1rem; }
+  .buy .label { font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; color: var(--result-accent); font-weight: 600; }
+  .buy .val { font-family: "Fraunces", Georgia, serif; font-size: 2rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .buy .note { color: var(--result-muted); font-size: .9rem; margin: .25rem 0 0; }
+
+  section.ref { margin-top: 3rem; max-width: 46rem; }
+  section.ref h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: .5rem; }
+  section.ref p { color: var(--ink-2); margin: 0 0 1rem; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 30rem; font-size: .95rem; }
+  th, td { text-align: left; padding: .55rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  ul.tips { margin: 1.25rem 0 0; padding-left: 1.2rem; color: var(--ink-2); }
+  ul.tips li { margin-bottom: .35rem; }
+  footer { margin-top: 2.5rem; color: var(--ink-3); font-size: .85rem; max-width: 46rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .choice, .seg label { transition: background-color .15s, border-color .15s; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Calculateur de portions</p>
+    <h1>Combien de poisson par personne&nbsp;?</h1>
+    <p>Choisissez la découpe et le type de repas, indiquez vos convives : vous obtenez la portion par personne et le poids total à demander au poissonnier.</p>
+  </header>
+
+  <div class="app">
+    <form class="panel" id="form" autocomplete="off">
+      <fieldset>
+        <legend>Découpe <small>· portion adulte, plat principal</small></legend>
+        <div class="choices" id="cuts"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Type de repas</legend>
+        <div class="seg">
+          <label><input type="radio" name="meal" id="meal-main" value="main" checked>Plat principal</label>
+          <label><input type="radio" name="meal" id="meal-starter" value="starter">Entrée</label>
+          <label><input type="radio" name="meal" id="meal-buffet" value="buffet">Buffet</label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Appétit</legend>
+        <div class="seg">
+          <label><input type="radio" name="appetite" id="appetite-light" value="0.8">Léger</label>
+          <label><input type="radio" name="appetite" id="appetite-normal" value="1" checked>Normal</label>
+          <label><input type="radio" name="appetite" id="appetite-big" value="1.25">Grosse faim</label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Convives</legend>
+        <div class="counts">
+          <div class="count">
+            <label for="adults">Adultes <small>à partir de 12 ans</small></label>
+            <div class="stepper">
+              <button type="button" data-step="-1" data-for="adults" aria-label="Un adulte de moins">−</button>
+              <input type="number" id="adults" name="adults" min="0" max="500" value="4" inputmode="numeric">
+              <button type="button" data-step="1" data-for="adults" aria-label="Un adulte de plus">+</button>
+            </div>
+          </div>
+          <div class="count">
+            <label for="children">Enfants <small>3 à 11 ans, demi-portion</small></label>
+            <div class="stepper">
+              <button type="button" data-step="-1" data-for="children" aria-label="Un enfant de moins">−</button>
+              <input type="number" id="children" name="children" min="0" max="500" value="2" inputmode="numeric">
+              <button type="button" data-step="1" data-for="children" aria-label="Un enfant de plus">+</button>
+            </div>
+          </div>
+        </div>
+      </fieldset>
+    </form>
+
+    <aside class="result" aria-live="polite">
+      <div>
+        <p class="eyebrow">Par adulte</p>
+        <div class="big"><span class="n" id="perAdult">180</span><span class="u">g</span></div>
+        <p class="desc" id="perAdultDesc">Filet avec peau, plat principal.</p>
+      </div>
+      <dl class="breakdown">
+        <div><dt id="adultsLine">4 adultes × 180 g</dt><dd id="adultsTotal">720 g</dd></div>
+        <div><dt id="childrenLine">2 enfants × 90 g</dt><dd id="childrenTotal">180 g</dd></div>
+      </dl>
+      <div class="buy">
+        <p class="label">À acheter</p>
+        <div class="val" id="buyTotal">900 g</div>
+        <p class="note" id="buyNote">Arrondi aux 50 g supérieurs, soit 0,9 kg.</p>
+      </div>
+    </aside>
+  </div>
+
+  <section class="ref">
+    <h2>Barème de référence</h2>
+    <p>Portions usuelles par adulte pour un plat principal. Plus il reste de déchets (tête, arêtes, peau), plus le poids brut à acheter augmente.</p>
+    <div class="table-wrap">
+      <table id="refTable">
+        <thead>
+          <tr><th>Découpe</th><th>Déchets</th><th class="num">Fourchette</th><th class="num">Retenu</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <ul class="tips">
+      <li>Entrée : comptez la moitié d'un plat principal. Buffet ou repas à plusieurs plats : environ 60 %.</li>
+      <li>Enfant de 3 à 11 ans : demi-portion. Avant 3 ans, 20 à 40 g de filet suffisent.</li>
+      <li>Un poisson entier rend environ 45 à 50 % de chair nette une fois levé en filets.</li>
+      <li>Prévoyez un peu plus pour un poisson gras servi seul (saumon, maquereau) et un peu moins s'il est accompagné d'une garniture copieuse.</li>
+    </ul>
+  </section>
+
+  <footer>Ordres de grandeur issus des usages de la poissonnerie et de la cuisine familiale françaises. Ajustez selon vos habitudes et le reste du menu.</footer>
+</div>
+
+<script>
+  const CUTS = [
+    { id: "whole",    label: "Poisson entier, non vidé",   sub: "tel que pêché : tête, viscères, arêtes", waste: "élevés",    range: "400 – 500 g", g: 450 },
+    { id: "gutted",   label: "Poisson entier, vidé",       sub: "écaillé et ébarbé, prêt à cuire",          waste: "importants", range: "300 – 350 g", g: 320 },
+    { id: "steak",    label: "Darne ou tranche",           sub: "avec l'arête centrale et la peau",         waste: "moyens",    range: "200 – 250 g", g: 220 },
+    { id: "filletSk", label: "Filet avec peau",            sub: "sans arêtes, peau conservée",              waste: "faibles",   range: "170 – 200 g", g: 180 },
+    { id: "fillet",   label: "Filet ou pavé sans peau",    sub: "chair nette, prête à cuire",               waste: "aucun",     range: "150 – 180 g", g: 160 },
+  ];
+  const MEAL = { main: { k: 1, name: "plat principal" }, starter: { k: 0.5, name: "entrée" }, buffet: { k: 0.6, name: "buffet" } };
+  const CHILD = 0.5;
+
+  const cutsEl = document.getElementById("cuts");
+  CUTS.forEach((c, i) => {
+    const l = document.createElement("label");
+    l.className = "choice";
+    l.innerHTML = `<input type="radio" name="cut" id="cut-${c.id}" value="${c.id}"${i === 3 ? " checked" : ""}>
+      <span><span class="lbl">${c.label}</span><span class="sub">${c.sub}</span></span>
+      <span class="g">${c.g} g</span>`;
+    cutsEl.appendChild(l);
+  });
+  const tbody = document.querySelector("#refTable tbody");
+  CUTS.forEach(c => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${c.label}</td><td>${c.waste}</td><td class="num">${c.range}</td><td class="num">${c.g} g</td>`;
+    tbody.appendChild(tr);
+  });
+
+  const fmt = n => n.toLocaleString("fr-FR");
+  const kg = g => (g / 1000).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+  const plural = (n, s, p) => `${fmt(n)} ${n > 1 ? p : s}`;
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const $ = id => document.getElementById(id);
+
+  function read(id) {
+    const el = $(id);
+    const v = clamp(parseInt(el.value, 10) || 0, +el.min, +el.max);
+    if (String(v) !== el.value) el.value = v;
+    return v;
+  }
+
+  function update() {
+    const f = new FormData($("form"));
+    const cut = CUTS.find(c => c.id === f.get("cut")) || CUTS[3];
+    const meal = MEAL[f.get("meal")] || MEAL.main;
+    const app = parseFloat(f.get("appetite")) || 1;
+    const adults = read("adults"), children = read("children");
+
+    const perAdult = Math.round(cut.g * meal.k * app / 10) * 10;
+    const perChild = Math.round(perAdult * CHILD / 10) * 10;
+    const aTot = perAdult * adults, cTot = perChild * children;
+    const raw = aTot + cTot;
+    const buy = Math.ceil(raw / 50) * 50;
+
+    $("perAdult").textContent = fmt(perAdult);
+    $("perAdultDesc").textContent = `${cut.label}, ${meal.name}${app !== 1 ? (app > 1 ? ", grosse faim" : ", appétit léger") : ""}.`;
+    $("adultsLine").textContent = `${plural(adults, "adulte", "adultes")} × ${fmt(perAdult)} g`;
+    $("adultsTotal").textContent = `${fmt(aTot)} g`;
+    $("childrenLine").textContent = `${plural(children, "enfant", "enfants")} × ${fmt(perChild)} g`;
+    $("childrenTotal").textContent = `${fmt(cTot)} g`;
+    $("childrenLine").parentElement.hidden = children === 0;
+
+    if (raw === 0) {
+      $("buyTotal").textContent = "—";
+      $("buyNote").textContent = "Ajoutez au moins un convive.";
+    } else {
+      $("buyTotal").textContent = buy >= 1000 ? `${kg(buy)} kg` : `${fmt(buy)} g`;
+      $("buyNote").textContent = buy === raw
+        ? `Soit ${fmt(raw)} g au total.`
+        : `Arrondi aux 50 g supérieurs, calcul exact ${fmt(raw)} g.`;
+    }
+  }
+
+  document.querySelectorAll(".stepper button").forEach(b => {
+    b.addEventListener("click", () => {
+      const el = $(b.dataset.for);
+      el.value = clamp((parseInt(el.value, 10) || 0) + +b.dataset.step, +el.min, +el.max);
+      update();
+    });
+  });
+  $("form").addEventListener("input", update);
+  $("form").addEventListener("change", update);
+  update();
+</script>
+</body>
+</html>

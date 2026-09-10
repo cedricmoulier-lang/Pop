@@ -1,0 +1,27 @@
+# Pop — Portions de poisson
+
+Calculateur de la quantité de poisson par personne et par repas.
+
+Ouvrez `index.html` dans un navigateur : aucune dépendance, aucun serveur nécessaire.
+
+## Ce que fait l'outil
+
+À partir de la découpe, du type de repas, de l'appétit et du nombre de convives, il donne :
+
+- la portion par adulte (les enfants de 3 à 11 ans comptent pour une demi-portion) ;
+- le détail adultes / enfants ;
+- le poids total à acheter, arrondi aux 50 g supérieurs.
+
+## Barème utilisé (par adulte, plat principal)
+
+| Découpe | Fourchette | Retenu |
+|---|---|---|
+| Poisson entier, non vidé | 400 – 500 g | 450 g |
+| Poisson entier, vidé | 300 – 350 g | 320 g |
+| Darne ou tranche | 200 – 250 g | 220 g |
+| Filet avec peau | 170 – 200 g | 180 g |
+| Filet ou pavé sans peau | 150 – 180 g | 160 g |
+
+Coefficients : entrée × 0,5 ; buffet × 0,6 ; appétit léger × 0,8 ; grosse faim × 1,25 ; enfant × 0,5.
+
+Les valeurs sont modifiables dans le tableau `CUTS` et l'objet `MEAL` en tête du script de `index.html`.
