@@ -266,14 +266,17 @@
     const lean = near ? 0 : 0.75 * Math.min(1, Math.abs(bird.vx) / (3 * S)) + 0.2 * clamp(bird.vy / (2 * S), -1, 1);
     bird.tilt += (bird.face * Math.max(0, lean) - bird.tilt) * Math.min(1, dt * 5);
 
-    // Battements : plus rapides en montée, vol plané en descente et à l'approche
-    const glideWant = near || bird.vy > 1.4 * S || Math.sin(time * 0.6) > 0.82 ? 1 : 0;
-    bird.glide += (glideWant - bird.glide) * Math.min(1, dt * 4);
-    const freq = bird.vy < -0.8 * S ? 3.4 : 2.7;
-    bird.phase += TAU * freq * dt * (1 - 0.85 * bird.glide);
-    bird.e = lerp(Math.sin(bird.phase), 0.55 + 0.08 * Math.sin(time * 2), bird.glide);
+    // Il bat des ailes tout le temps qu'il vole : coup vers le bas rapide et puissant, remontée plus lente.
+    // Plus vite en montée, un peu moins en descente. Il ne tient ses ailes levées qu'au moment de se poser.
+    const flare = tg.el && dist < 0.6 * S;
+    bird.glide += ((flare ? 1 : 0) - bird.glide) * Math.min(1, dt * 6);
+    const freq = bird.vy < -0.8 * S ? 3.3 : bird.vy > 1.2 * S ? 2.4 : 2.8;
+    const down = Math.cos(bird.phase) < 0;
+    bird.phase += TAU * freq * dt * (down ? 1.3 : 0.8) * (1 - 0.7 * bird.glide);
+    bird.e = lerp(Math.sin(bird.phase), 0.75, bird.glide);
     bird.fold += (0 - bird.fold) * Math.min(1, dt * 6);
-    bird.bob = -Math.cos(bird.phase) * 0.035 * S * (1 - bird.glide);
+    // Le corps monte à chaque coup d'aile vers le bas, et redescend à la remontée
+    bird.bob = Math.sin(bird.phase) * 0.05 * S * (1 - bird.glide);
 
     if (tg.el ? dist < 0.25 * S : dist < 0.6 * S) {
       if (tg.el) land(); else pickTarget();
@@ -508,7 +511,7 @@
   // Aile en éventail. k : 0 baissée → 1 levée ; kh : idem pour la main (retard du battement).
   // o = -1 pour l'aile proche (s'ouvre vers l'arrière), +1 pour l'aile lointaine (s'ouvre vers l'avant).
   function wing(sh, sx, sy, k, kh, o, scale, far, out) {
-    const lo = o < 0 ? 2.62 : 0.35, hi = o < 0 ? 4.28 : -1.31;
+    const lo = o < 0 ? 2.25 : 0.6, hi = o < 0 ? 4.28 : -1.31;
     const thA = lerp(lo, hi, k) - o * 0.15;
     const thH = lerp(lo, hi, clamp(kh, 0, 1)) + o * 0.35;
     const LA = 0.44 * scale, LH = 0.56 * scale;
@@ -691,7 +694,7 @@
     const dX = -UPX, dY = -UPY;         // bas
     const fX = ct, fY = -face * st;     // horizontale vers l'avant
     const k = (e + 1) / 2;
-    const kh = k - 0.18 * Math.cos(bird.phase) * (1 - bird.glide) * (1 - fold);
+    const kh = k - 0.26 * Math.cos(bird.phase) * (1 - bird.glide) * (1 - fold);
 
     // Aile lointaine, plus sombre et tramée, levée derrière la tête
     wing(sh, 0.03, -0.24, clamp(k * 0.95 + 0.04, 0, 1), kh, 1, 0.82, true, flight);
