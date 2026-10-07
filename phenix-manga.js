@@ -21,12 +21,14 @@
   const TEXTUAL = 'h1, h2, h3, h4, h5, h6, p, a, span, li, label, strong, em';
 
   /* ---------- Couleurs ---------- */
-  const INK = '#40101a';                          // trait brun-rouge du dessin
+  const INK = 'rgba(58, 8, 16, 0.42)';            // séparation très légère entre les plumes
   const INK_SOFT = 'rgba(80, 12, 20, 0.42)';      // barbes, écailles, hachures
   const SHADE = 'rgba(112, 14, 24, 0.36)';        // ombre de chaque plume
-  const SHINE = 'rgba(255, 246, 214, 0.5)';       // reflet de chaque plume
+  const SHINE = 'rgba(255, 246, 214, 0.42)';      // reflet de chaque plume
+  const BARB_DARK = 'rgba(80, 12, 18, 0.26)';     // barbes côté ombre
+  const BARB_LIGHT = 'rgba(255, 228, 172, 0.3)';  // barbes côté lumière
   const RACHIS = 'rgba(255, 234, 176, 0.7)';      // tige claire au centre des plumes
-  const INK_W = 0.013;        // épaisseur du trait, en fraction de la taille de l'oiseau
+  const INK_W = 0.009;        // épaisseur des séparations, en fraction de la taille de l'oiseau
   const FOOT = [0.06, 0.62];  // point d'appui des serres, repère local
   // Feu : température 0 → 1, de la braise rouge sombre au blanc incandescent
   // (pas de blanc pur : le feu doit rester visible sur une page claire)
@@ -563,6 +565,7 @@
 
   /* ---------- Dessin de l'oiseau (repère local : tourné vers +x, y vers le bas, unité = taille) ---------- */
   let M = null;              // dégradés de l'image en cours
+  let G = null;              // contexte du calque où l'oiseau est dessiné
   let UPX = 0, UPY = -1;     // « haut » du monde, vu de l'oiseau
   let spawnXf = null;        // transformation à appliquer aux points de flamme (tête stabilisée)
   const spawnLocal = [];
@@ -574,12 +577,12 @@
   // Le plumage est éclairé de l'intérieur : blanc doré au cœur, orange, puis rouge sombre au bout des plumes.
   function materials() {
     const rg = (x, y, r, stops) => {
-      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      const g = G.createRadialGradient(x, y, 0, x, y, r);
       for (const [o, c] of stops) g.addColorStop(o, c);
       return g;
     };
     const lg = (x0, y0, x1, y1, stops) => {
-      const g = ctx.createLinearGradient(x0, y0, x1, y1);
+      const g = G.createLinearGradient(x0, y0, x1, y1);
       for (const [o, c] of stops) g.addColorStop(o, c);
       return g;
     };
@@ -590,11 +593,20 @@
       tail: rg(-0.08, 0.3, 1.75 + fl, [[0, '#ffd06a'], [0.2, '#ff9a26'], [0.48, '#f2561a'], [0.76, '#c4281e'], [1, '#701222']]),
       leg: lg(0, 0.3, 0, 0.66, [[0, '#ffc04c'], [1, '#c4621c']]),
       beak: lg(0.3, -0.71, 0.4, -0.64, [[0, '#fff2b8'], [0.55, '#ffc23a'], [1, '#9a4416']]),
-      aura: rg(0.02, -0.2, 1.5, [[0, `rgba(255,160,60,${0.16 + fl})`], [0.4, 'rgba(255,110,40,0.07)'], [1, 'rgba(255,80,30,0)']]),
     };
   }
 
-  // Plume détaillée : dégradé de feu, ombre et reflet, tige claire et barbes, contour fin.
+  // Le long d'une plume : base dans l'ombre de la plume qui la recouvre, bout qui rougeoie.
+  function lengthShade(x0, y0, x1, y1) {
+    const g = G.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, 'rgba(58,6,14,0.5)');
+    g.addColorStop(0.32, 'rgba(58,6,14,0)');
+    g.addColorStop(0.72, 'rgba(255,236,170,0)');
+    g.addColorStop(1, 'rgba(255,232,160,0.5)');
+    return g;
+  }
+
+  // Plume détaillée : dégradé de feu, ombre et lumière, tige claire et barbes fines.
   function plume(sh, bx, by, dx, dy, len, w, o) {
     const iw = o.ink || INK_W, curl = o.curl || 0, side = o.side || 1;
     const fill = o.fill || M.core;
@@ -605,29 +617,30 @@
     const p = tongue(bx, by, dx, dy, len, w, o.flick ? 1 : 0, curl);
     sh.push({ p, f: fill });
     const px = -dy, py = dx;
+    const tipx = bx + dx * len + px * w * curl * 3, tipy = by + dy * len + py * w * curl * 3;
     const parts = [
+      { p, f: lengthShade(bx, by, tipx, tipy) },
       { p: tongue(bx + px * w * 0.55 * side, by + py * w * 0.55 * side, dx, dy, len * 0.95, w * 0.55, 0, curl), f: SHADE },
       { p: tongue(bx - px * w * 0.3 * side, by - py * w * 0.3 * side, dx, dy, len * 0.72, w * 0.3, 0, curl * 0.9), f: SHINE },
     ];
-    const tipx = bx + dx * len + px * w * curl * 3, tipy = by + dy * len + py * w * curl * 3;
     if (detail > 0 && o.lines !== false && len * S > 12) {
       const mx = bx + dx * len * 0.55, my = by + dy * len * 0.55;
       const ex = lerp(mx, tipx, 0.6), ey = lerp(my, tipy, 0.6);
       const rachis = new Path2D();
       rachis.moveTo(bx, by);
       rachis.quadraticCurveTo(mx, my, ex, ey);
-      parts.push({ p: rachis, w: INK_W * 0.8, c: RACHIS });
+      parts.push({ p: rachis, w: INK_W * 1.1, c: RACHIS });
       if (detail > 1) {
-        const barbs = new Path2D();
-        for (let u = 0.28; u < 0.86; u += 0.11) {
+        const dark = new Path2D(), light = new Path2D();
+        for (let u = 0.18; u < 0.92; u += 0.055) {
           const [rx, ry] = quadPt(bx, by, mx, my, ex, ey, u);
-          const [qx, qy] = quadPt(bx, by, mx, my, ex, ey, Math.min(1, u + 0.14));
-          barbs.moveTo(rx, ry);
-          barbs.lineTo(qx + px * w * 0.8 * side, qy + py * w * 0.8 * side);
-          barbs.moveTo(rx, ry);
-          barbs.lineTo(qx - px * w * 0.55 * side, qy - py * w * 0.55 * side);
+          const [qx, qy] = quadPt(bx, by, mx, my, ex, ey, Math.min(1, u + 0.13));
+          dark.moveTo(rx, ry);
+          dark.lineTo(qx + px * w * 0.85 * side, qy + py * w * 0.85 * side);
+          light.moveTo(rx, ry);
+          light.lineTo(qx - px * w * 0.6 * side, qy - py * w * 0.6 * side);
         }
-        parts.push({ p: barbs, w: INK_W * 0.5, c: INK_SOFT });
+        parts.push({ p: dark, w: INK_W * 0.6, c: BARB_DARK }, { p: light, w: INK_W * 0.6, c: BARB_LIGHT });
       }
     }
     sh.push({ clip: p, parts });
@@ -670,7 +683,7 @@
       if (r > 0.45) [dx, dy] = rot2(dx, dy, (-o * slot * (r - 0.45)) / 0.55);
       const len = lerp(0.58, 0.88, r ** 1.2) * scale * (1 - 0.22 * up);
       plume(sh, bx, by, dx, dy, len, (r > 0.6 ? 0.09 : 0.11) * scale, {
-        fill, curl: o * (0.22 + 0.06 * r) + fl(i), flick: far ? 0 : 1, split: !far && r > 0.5 ? o * 0.4 : 0, side, heat: 0.75,
+        fill, curl: o * (0.18 + 0.05 * r) + fl(i), side, heat: 0.75,
       });
     }
     // Rémiges secondaires, sur le bras
@@ -679,7 +692,7 @@
       const [bx, by] = along(lerp(0.05, 0.42, r));
       const [dx, dy] = dirAt(lerp(0, 0.52, r));
       plume(sh, bx, by, dx, dy, lerp(0.4, 0.56, r) * scale * (1 - 0.1 * up), 0.1 * scale, {
-        fill, curl: o * 0.2 + fl(i + 7), flick: far ? 0 : i % 2, side, heat: 0.85,
+        fill, curl: o * 0.16 + fl(i + 7), side, heat: 0.85,
       });
     }
     // Grandes couvertures
@@ -764,7 +777,7 @@
       const r = i / 4, sw = lerp(-0.25, 0.35, r);
       const [dx, dy] = norm(dX - fX * sw, dY - fY * sw);
       plume(sh, hx + lerp(-0.06, 0.07, r), hy - 0.02, dx, dy, lerp(0.17, 0.24, 1 - Math.abs(r - 0.5) * 2), 0.05, {
-        fill: far ? M.far : M.core, curl: i % 2 ? 0.2 : -0.2, flick: i % 2, lines: false, heat: 0.9,
+        fill: far ? M.far : M.core, curl: i % 2 ? 0.2 : -0.2, lines: false, heat: 0.9,
       });
     }
   }
@@ -775,7 +788,9 @@
     const shape = ribbonW(pts, vane);
     const fill = back ? M.far : M.tail;
     sh.push({ p: shape, f: fill });
+    const last = pts[pts.length - 1];
     const parts = [
+      { p: shape, f: lengthShade(pts[0][0], pts[0][1], last[0], last[1]) },
       { p: ribbonW(pts.map(([x, y]) => [x + 0.012, y]), (v) => (v < 0.42 ? 0 : vane(v) * 0.4)), f: SHINE },
       { p: ribbonW(pts.map(([x, y]) => [x - 0.014, y]), (v) => (v < 0.42 ? 0 : vane(v) * 0.45)), f: SHADE },
     ];
@@ -794,7 +809,7 @@
             barbs.lineTo(x + tx * w * 0.9 - ty * w * s, y + ty * w * 0.9 + tx * w * s);
           }
         }
-        parts.push({ p: barbs, w: INK_W * 0.5, c: INK_SOFT });
+        parts.push({ p: barbs, w: INK_W * 0.6, c: BARB_DARK });
       }
     }
     sh.push({ clip: shape, parts });
@@ -831,8 +846,6 @@
     const kh = k - 0.26 * Math.cos(bird.phase) * (1 - bird.glide) * (1 - fold);
     const up = bird.up, comp = lean * 0.85, slot = 0.22 * (1 - up);
 
-    // Halo de chaleur autour de l'oiseau
-    sh.push({ p: circle(0.02, -0.2, 1.5), f: M.aura });
 
     // Aile lointaine, plus sombre, levée derrière la tête
     wing(sh, 0.03, -0.24, clamp(k * 0.95 + 0.04, 0, 1), kh, 1, 0.82, true, up, comp, slot);
@@ -931,7 +944,7 @@
       const r = i / 5;
       const [dx, dy] = norm(lerp(-0.35, 0.1, r) + Math.sin(time * 3 + i) * 0.05, 1);
       plume(sh, lerp(-0.13, 0.11, r), 0.29 + 0.05 * Math.sin(r * Math.PI), dx, dy, 0.15 + 0.05 * Math.sin(r * Math.PI), 0.05, {
-        curl: i % 2 ? 0.25 : -0.25, flick: 1, lines: false, heat: 0.95,
+        curl: i % 2 ? 0.25 : -0.25, lines: false, heat: 0.95,
       });
     }
 
@@ -1040,7 +1053,7 @@
     liner.quadraticCurveTo(0.232, bird.blinkT > 0 ? -0.664 : -0.694, 0.27, -0.681);
     liner.moveTo(0.207, -0.672);
     liner.lineTo(0.186, -0.665);
-    hsh.push({ p: liner, w: 0.011 });
+    hsh.push({ p: liner, w: 0.011, c: '#2a080c' });
     hsh.push({ p: brow, f: '#c4401c', w: INK_W * 0.8 });
     spawnXf = null;
     sh.push({ tf, items: hsh });
@@ -1058,43 +1071,98 @@
     }
   }
 
-  function drawShapes(list) {
+  function drawShapes(c, list) {
     for (const s of list) {
       if (s.items) {
-        ctx.save();
-        ctx.transform(s.tf[0], s.tf[1], s.tf[2], s.tf[3], s.tf[4], s.tf[5]);
-        drawShapes(s.items);
-        ctx.restore();
+        c.save();
+        c.transform(s.tf[0], s.tf[1], s.tf[2], s.tf[3], s.tf[4], s.tf[5]);
+        drawShapes(c, s.items);
+        c.restore();
         continue;
       }
       if (s.parts) {
-        ctx.save();
-        ctx.clip(s.clip);
+        c.save();
+        c.clip(s.clip);
         for (const q of s.parts) {
-          if (q.f) { ctx.fillStyle = q.f; ctx.fill(q.p); }
-          if (q.w) { ctx.strokeStyle = q.c || INK; ctx.lineWidth = q.w; ctx.stroke(q.p); }
+          if (q.f) { c.fillStyle = q.f; c.fill(q.p); }
+          if (q.w) { c.strokeStyle = q.c || INK; c.lineWidth = q.w; c.stroke(q.p); }
         }
-        ctx.restore();
+        c.restore();
         continue;
       }
-      if (s.f) { ctx.fillStyle = s.f; ctx.fill(s.p); }
-      if (s.w) { ctx.strokeStyle = s.c || INK; ctx.lineWidth = s.w; ctx.stroke(s.p); }
+      if (s.f) { c.fillStyle = s.f; c.fill(s.p); }
+      if (s.w) { c.strokeStyle = s.c || INK; c.lineWidth = s.w; c.stroke(s.p); }
     }
+  }
+
+  // Silhouette remplie d'une seule couleur, pour le halo (sans détails).
+  function fillSilhouette(c, list) {
+    for (const s of list) {
+      if (s.items) {
+        c.save();
+        c.transform(s.tf[0], s.tf[1], s.tf[2], s.tf[3], s.tf[4], s.tf[5]);
+        fillSilhouette(c, s.items);
+        c.restore();
+      } else if (s.f && !s.parts) {
+        c.fill(s.p);
+      }
+    }
+  }
+
+  // Petit calque basse résolution : agrandi, il donne une lueur floue à la forme de l'oiseau.
+  let gcv = null, gctx = null;
+  const GLOW_SPAN = 5.8; // taille couverte par le calque, en tailles d'oiseau
+  function glowLayer() {
+    const side = Math.max(16, Math.ceil((GLOW_SPAN * S) / 9));
+    if (gcv && gcv.width === side) return;
+    gcv = document.createElement('canvas');
+    gcv.width = gcv.height = side;
+    gctx = gcv.getContext('2d');
   }
 
   function drawBird() {
     if (bird.state === 'dead') { spawnW = []; return; }
+    glowLayer();
+    G = ctx;
     const shapes = buildBird();
     const breath = bird.state === 'perch' && !reduce.matches ? Math.sin(bird.breath) * 0.015 : 0;
+    const cx = bird.x, cy = bird.y + bird.bob, sz = GLOW_SPAN * S;
+
+    // Silhouette en basse résolution, d'une seule couleur de lumière chaude
+    const gs = gcv.width, k = gs / sz;
+    gctx.setTransform(1, 0, 0, 1, 0, 0);
+    gctx.clearRect(0, 0, gs, gs);
+    gctx.setTransform(k, 0, 0, k, gs / 2, gs / 2);
+    gctx.rotate(bird.tilt);
+    gctx.scale(bird.face * S, S * (1 + breath));
+    gctx.fillStyle = '#ff9a3c';
+    fillSilhouette(gctx, shapes);
+
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    ctx.translate(bird.x, bird.y + bird.bob);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    // Halo de lumière derrière l'oiseau
+    ctx.globalAlpha = 0.3;
+    ctx.drawImage(gcv, cx - sz * 0.54, cy - sz * 0.54, sz * 1.08, sz * 1.08);
+    ctx.globalAlpha = 0.45;
+    ctx.drawImage(gcv, cx - sz / 2, cy - sz / 2, sz, sz);
+    ctx.globalAlpha = 1;
+    // L'oiseau, dessiné directement
+    ctx.translate(cx, cy);
     ctx.rotate(bird.tilt);
     ctx.scale(bird.face * S, S * (1 + breath));
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
-    drawShapes(shapes);
+    drawShapes(ctx, shapes);
+    // Éclat : le plumage incandescent déborde un peu de ses contours
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.22;
+    ctx.drawImage(gcv, cx - sz / 2, cy - sz / 2, sz, sz);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
     spawnW = spawnLocal.map(([x, y, h]) => { const p = toWorld(x, y); p.push(h); return p; });
-    mark(bird.x, bird.y + S * 0.2, S * 2.8);
+    mark(cx, cy, sz * 0.57);
   }
 
   function drawParticles(front) {
@@ -1130,7 +1198,7 @@
       let si = (temp * lastS + 0.5) | 0;
       if (si < 0) si = 0; else if (si > lastS) si = lastS;
       ctx.globalAlpha = alpha > 1 ? 1 : alpha;
-      if (pKind[i] === FLAME) ctx.drawImage(SPR[si], pX[i] - size * 0.65, pY[i] - size * 1.9, size * 1.3, size * 2.6);
+      if (pKind[i] === FLAME) ctx.drawImage(SPR[si], pX[i] - size * 0.5, pY[i] - size * 2.1, size, size * 2.9);
       else ctx.drawImage(SPR[si], pX[i] - size, pY[i] - size * 1.5, size * 2, size * 2);
       mark(pX[i], pY[i] - size, size * 2);
     }
