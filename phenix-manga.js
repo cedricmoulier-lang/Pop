@@ -29,6 +29,8 @@
   const RED = '#e8342a';
   const CRIMSON = '#a51d35';
   const EMBER = '#6b1628';
+  const AMBER = '#ffa21f';
+  const VERMILION = '#f4561e';
   const SMOKE = '#fff8ec';
   const SFX_FONT = '"Dela Gothic One", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "Noto Sans JP", sans-serif';
   const INK_W = 0.024;  // épaisseur du trait, en fraction de la taille de l'oiseau
@@ -40,6 +42,7 @@
   const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
   const rand = (a, b) => a + Math.random() * (b - a);
   const norm = (x, y) => { const d = Math.hypot(x, y) || 1; return [x / d, y / d]; };
+  const lerp2 = (p, q, u) => [p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u];
   const quadPt = (ax, ay, cx, cy, bx, by, u) => {
     const v = 1 - u;
     return [v * v * ax + 2 * v * u * cx + u * u * bx, v * v * ay + 2 * v * u * cy + u * u * by];
@@ -131,6 +134,7 @@
   let W = 0, H = 0, DPR = 1, S = 80;
   let paused = false, hidden = false, raf = 0, last = 0, time = 0;
   let dirty = null, hitPos = '';
+  let detail = 2; // niveau de détail selon la taille : barbes et hachures en dessous d'un seuil
   const fx = [];
   const anchorsLocal = { flight: [], crest: [] };
   const anchors = { flight: [], crest: [] };
@@ -443,99 +447,8 @@
   }
 
   /* ---------- Dessin de l'oiseau (repère local : tourné vers +x, y vers le bas, unité = taille) ---------- */
-  // Aile en éventail de plumes-flammes. k : 0 baissée → 1 levée ; kh : idem pour la main (retard du battement).
-  // o = -1 pour l'aile proche (s'ouvre vers l'arrière), +1 pour l'aile lointaine (s'ouvre vers l'avant).
-  function wing(sh, sx, sy, k, kh, o, scale, far, out) {
-    const lo = o < 0 ? 2.62 : 0.35, hi = o < 0 ? 4.28 : -1.31;
-    const thA = lerp(lo, hi, k) - o * 0.15;
-    const thH = lerp(lo, hi, clamp(kh, 0, 1)) + o * 0.35;
-    const LA = 0.42 * scale, LH = 0.55 * scale;
-    const wx = sx + Math.cos(thA) * LA, wy = sy + Math.sin(thA) * LA;
-    const tx = wx + Math.cos(thH) * LH, ty = wy + Math.sin(thH) * LH;
-    const along = (f) => {
-      const d = f * (LA + LH);
-      return d < LA ? [sx + Math.cos(thA) * d, sy + Math.sin(thA) * d] : [wx + Math.cos(thH) * (d - LA), wy + Math.sin(thH) * (d - LA)];
-    };
-    const spread = far ? 0.8 : 1.05;
-    const N = 9;
-    for (let i = N - 1; i >= 0; i--) {
-      const r = i / (N - 1);
-      const [bx, by] = along(0.1 + 0.85 * r ** 0.9);
-      const phi = lerp(thH + o * spread, thH - o * 0.05, r ** 0.8);
-      const dx = Math.cos(phi), dy = Math.sin(phi);
-      const len = lerp(0.36, 0.72, r ** 1.3) * scale;
-      const w = lerp(0.1, 0.12, r) * scale;
-      const fl = Math.sin(time * 7 + i * 1.3) * 0.08;
-      const curl = o * (0.28 + 0.1 * r) + fl;
-      const fill = far ? CRIMSON : r > 0.55 ? RED : ORANGE;
-      sh.push({ p: tongue(bx, by, dx, dy, len, w, !far && r > 0.45 ? 1 : 0, curl), f: fill, w: INK_W * 0.85, halo: true, tone: far });
-      sh.push({ p: tongue(bx + dx * 0.02, by + dy * 0.02, dx, dy, len * 0.66, w * 0.38, 0, curl * 0.8), f: far ? RED : GOLD });
-      if (i >= N - 2) out.push([bx + dx * len, by + dy * len]);
-    }
-    // Couvertures festonnées sur l'os de l'aile, côté intérieur
-    const [ix, iy] = [Math.cos(thH + o * spread), Math.sin(thH + o * spread)];
-    for (const [rows, width, fill] of [[6, 0.2, far ? RED : GOLD], [5, 0.1, far ? CRIMSON : ORANGE]]) {
-      const band = new Path2D();
-      const edge = [];
-      for (let j = 0; j <= rows; j++) edge.push(along((j / rows) * 0.62));
-      band.moveTo(edge[0][0], edge[0][1]);
-      for (const q of edge) band.lineTo(q[0], q[1]);
-      let prev = null;
-      for (let j = rows; j >= 0; j--) {
-        const taper = 1 - (j / rows) * 0.55;
-        const P = [edge[j][0] + ix * width * taper * scale, edge[j][1] + iy * width * taper * scale];
-        if (!prev) band.lineTo(P[0], P[1]);
-        else {
-          const m = [(prev[0] + P[0]) / 2 + ix * 0.05 * scale, (prev[1] + P[1]) / 2 + iy * 0.05 * scale];
-          band.quadraticCurveTo(m[0], m[1], P[0], P[1]);
-        }
-        prev = P;
-      }
-      band.closePath();
-      sh.push({ p: band, f: fill, w: INK_W * 0.9, halo: true, tone: far });
-    }
-    // Pointe de l'aile en feu
-    const fl = Math.sin(time * 10 + o) * 0.5 + Math.sin(time * 6.3) * 0.5;
-    const len = (0.2 + 0.06 * fl) * scale;
-    const dx = Math.cos(thH), dy = Math.sin(thH);
-    sh.push({ p: tongue(tx, ty, dx, dy, len, 0.05 * scale, 1, o * 0.3 + 0.15 * fl), f: far ? RED : ORANGE, w: INK_W * 0.9, halo: true });
-    sh.push({ p: tongue(tx + dx * 0.01, ty + dy * 0.01, dx, dy, len * 0.6, 0.022 * scale, 0, 0.1 * fl), f: GOLD });
-    out.push([tx + dx * len, ty + dy * len]);
-  }
-
-  // Patte et serres. k : 0 repliée (en vol) → 1 tendue vers le perchoir.
-  function leg(sh, far, k, dX, dY, fX, fY) {
-    const hx = far ? -0.03 : 0.04, hy = 0.22;
-    const ax = lerp(hx + 0.1, hx + 0.02, k) + (far ? -0.02 : 0), ay = lerp(0.42, 0.64, k);
-    const p = new Path2D();
-    p.moveTo(hx, hy);
-    p.quadraticCurveTo(hx + 0.06, (hy + ay) / 2, ax, ay);
-    const claws = new Path2D();
-    const toeK = lerp(0.55, 1, k);
-    for (const [a, c] of [[0.1, 0.01], [0.08, 0.035], [-0.065, 0.008]]) {
-      const tx = ax + (fX * a + dX * c) * toeK, ty = ay + (fY * a + dY * c) * toeK, s = a > 0 ? 1 : -1;
-      p.moveTo(ax, ay);
-      p.lineTo(tx, ty);
-      // Serre noire et crochue
-      claws.moveTo(tx - dX * 0.012, ty - dY * 0.012);
-      claws.quadraticCurveTo(tx + fX * 0.03 * s, ty + fY * 0.03 * s, tx + fX * 0.012 * s + dX * 0.038, ty + fY * 0.012 * s + dY * 0.038);
-      claws.lineTo(tx + dX * 0.012, ty + dY * 0.012);
-      claws.closePath();
-    }
-    sh.push({ p, f: null, w: 0.06, line: far ? CRIMSON : GOLD, halo: true });
-    sh.push({ p: claws, f: INK, w: INK_W * 0.6, halo: true });
-    // Plumage de la cuisse, en mèches de flamme
-    const tuft = new Path2D();
-    tuft.moveTo(hx - 0.06, hy - 0.06);
-    tuft.quadraticCurveTo(hx - 0.09, hy + 0.05, hx - 0.07, hy + 0.15);
-    tuft.quadraticCurveTo(hx - 0.04, hy + 0.1, hx - 0.01, hy + 0.06);
-    tuft.quadraticCurveTo(hx + 0.01, hy + 0.12, hx + 0.02, hy + 0.19);
-    tuft.quadraticCurveTo(hx + 0.04, hy + 0.12, hx + 0.05, hy + 0.07);
-    tuft.quadraticCurveTo(hx + 0.08, hy + 0.1, hx + 0.1, hy + 0.14);
-    tuft.quadraticCurveTo(hx + 0.1, hy, hx + 0.06, hy - 0.07);
-    tuft.closePath();
-    sh.push({ p: tuft, f: far ? CRIMSON : ORANGE, w: INK_W * 0.9, halo: true, tone: far });
-  }
+  const rot2 = (x, y, a) => { const c = Math.cos(a), s = Math.sin(a); return [x * c - y * s, x * s + y * c]; };
+  let UPX = 0, UPY = -1; // « haut » du monde, vu de l'oiseau
 
   // Ruban à largeur variable le long d'une ligne de points.
   function ribbonW(pts, wf) {
@@ -554,12 +467,228 @@
     return p;
   }
 
+  // Plume-flamme détaillée : aplat, ombre, reflet, rachis et barbes, puis contour encré.
+  function plume(sh, bx, by, dx, dy, len, w, o) {
+    const iw = o.ink || INK_W * 0.75;
+    const curl = o.curl || 0, side = o.side || 1;
+    const halo = o.halo !== false;
+    if (o.split) {
+      const [fx, fy] = rot2(dx, dy, o.split);
+      const p2 = tongue(bx + dx * len * 0.58, by + dy * len * 0.58, fx, fy, len * 0.45, w * 0.42, 0, curl * 1.4);
+      sh.push({ p: p2, f: o.dark || o.fill, w: iw, halo, tone: o.tone });
+    }
+    const p = tongue(bx, by, dx, dy, len, w, o.flick ? 1 : 0, curl);
+    sh.push({ p, f: o.fill, halo, hw: iw, tone: o.tone });
+    const px = -dy, py = dx, parts = [];
+    if (o.dark) parts.push({ p: tongue(bx + px * w * 0.55 * side, by + py * w * 0.55 * side, dx, dy, len * 0.95, w * 0.55, 0, curl), f: o.dark, tone: o.tone });
+    if (o.light) parts.push({ p: tongue(bx - px * w * 0.3 * side, by - py * w * 0.3 * side, dx, dy, len * 0.72, w * 0.32, 0, curl * 0.9), f: o.light });
+    if (detail > 0 && o.barbs !== false && len * S > 12) {
+      const tipx = bx + dx * len + px * w * curl * 3, tipy = by + dy * len + py * w * curl * 3;
+      const mx = bx + dx * len * 0.55, my = by + dy * len * 0.55;
+      const ex = lerp(mx, tipx, 0.6), ey = lerp(my, tipy, 0.6);
+      const lines = new Path2D();
+      lines.moveTo(bx, by);
+      lines.quadraticCurveTo(mx, my, ex, ey);
+      if (detail > 1) {
+        for (let u = 0.28; u < 0.86; u += 0.11) {
+          const [rx, ry] = quadPt(bx, by, mx, my, ex, ey, u);
+          const [qx, qy] = quadPt(bx, by, mx, my, ex, ey, Math.min(1, u + 0.14));
+          lines.moveTo(rx, ry);
+          lines.lineTo(qx + px * w * 0.8 * side, qy + py * w * 0.8 * side);
+          lines.moveTo(rx, ry);
+          lines.lineTo(qx - px * w * 0.55 * side, qy - py * w * 0.55 * side);
+        }
+      }
+      parts.push({ p: lines, w: INK_W * 0.38 });
+    }
+    if (parts.length) sh.push({ clip: p, parts });
+    sh.push({ p, f: null, w: iw });
+  }
+
+  // Aile en éventail. k : 0 baissée → 1 levée ; kh : idem pour la main (retard du battement).
+  // o = -1 pour l'aile proche (s'ouvre vers l'arrière), +1 pour l'aile lointaine (s'ouvre vers l'avant).
+  function wing(sh, sx, sy, k, kh, o, scale, far, out) {
+    const lo = o < 0 ? 2.62 : 0.35, hi = o < 0 ? 4.28 : -1.31;
+    const thA = lerp(lo, hi, k) - o * 0.15;
+    const thH = lerp(lo, hi, clamp(kh, 0, 1)) + o * 0.35;
+    const LA = 0.44 * scale, LH = 0.56 * scale;
+    const wx = sx + Math.cos(thA) * LA, wy = sy + Math.sin(thA) * LA;
+    const tx = wx + Math.cos(thH) * LH, ty = wy + Math.sin(thH) * LH;
+    const along = (f) => {
+      const d = f * (LA + LH);
+      return d < LA ? [sx + Math.cos(thA) * d, sy + Math.sin(thA) * d] : [wx + Math.cos(thH) * (d - LA), wy + Math.sin(thH) * (d - LA)];
+    };
+    const spread = far ? 0.85 : 1.1;
+    const dirAt = (u) => { const a = lerp(thH + o * spread, thH - o * 0.05, clamp(u, 0, 1) ** 0.8); return [Math.cos(a), Math.sin(a)]; };
+    const [ix, iy] = dirAt(0);
+    const ldx = -ix, ldy = -iy; // vers le bord d'attaque
+    const fl = (i) => Math.sin(time * 7 + i * 1.3 + o) * 0.08;
+    const P = far
+      ? { pri: [CRIMSON, EMBER, RED], sec: [CRIMSON, EMBER, VERMILION], gc: [RED, CRIMSON, ORANGE], mc: [VERMILION, RED, GOLD], band: VERMILION }
+      : { pri: [RED, CRIMSON, ORANGE], sec: [VERMILION, RED, GOLD], gc: [ORANGE, VERMILION, GOLD], mc: [AMBER, ORANGE, CREAM], band: ORANGE };
+    const side = -o;
+    const keep = detail;
+    if (far) detail = Math.max(0, detail - 1);
+
+    // Rémiges primaires, sur la main, fourchues au bout
+    for (let i = 6; i >= 0; i--) {
+      const r = i / 6;
+      const [bx, by] = along(lerp(0.42, 0.96, r));
+      const [dx, dy] = dirAt(lerp(0.55, 1, r));
+      const len = lerp(0.58, 0.88, r ** 1.2) * scale;
+      plume(sh, bx, by, dx, dy, len, 0.11 * scale, { fill: P.pri[0], dark: P.pri[1], light: P.pri[2], curl: o * (0.3 + 0.08 * r) + fl(i), flick: far ? 0 : 1, split: !far && r > 0.4 ? o * 0.5 : 0, tone: far, side });
+      if (!far && i >= 5) out.push([bx + dx * len, by + dy * len]);
+    }
+    // Rémiges secondaires, sur le bras
+    for (let i = 6; i >= 0; i--) {
+      const r = i / 6;
+      const [bx, by] = along(lerp(0.05, 0.42, r));
+      const [dx, dy] = dirAt(lerp(0, 0.52, r));
+      plume(sh, bx, by, dx, dy, lerp(0.4, 0.56, r) * scale, 0.1 * scale, { fill: P.sec[0], dark: P.sec[1], light: P.sec[2], curl: o * 0.24 + fl(i + 7), flick: far ? 0 : i % 2, tone: far, side });
+    }
+    // Flammèches qui montent du bord d'attaque
+    for (let i = 0; i < 4; i++) {
+      const [bx, by] = along(0.12 + i * 0.17);
+      const [dx, dy] = norm(UPX + ldx * 0.8, UPY + ldy * 0.8);
+      const f = Math.sin(time * 9 + i * 1.9 + o) * 0.5 + 0.5;
+      plume(sh, bx, by, dx, dy, (0.09 + 0.06 * f) * scale, 0.035 * scale, { fill: far ? RED : ORANGE, light: GOLD, curl: 0.3 * (f - 0.5), flick: 1, barbs: false, tone: far });
+    }
+    // Grandes couvertures
+    for (let i = 8; i >= 0; i--) {
+      const r = i / 8;
+      const [bx, by] = along(lerp(0.03, 0.72, r));
+      const [dx, dy] = dirAt(lerp(0, 0.9, r));
+      plume(sh, bx + ldx * 0.02, by + ldy * 0.02, dx, dy, lerp(0.22, 0.32, r) * scale, 0.085 * scale, { fill: P.gc[0], dark: P.gc[1], light: P.gc[2], curl: o * 0.18, tone: far, side });
+    }
+    // Petites couvertures, en écailles
+    for (let i = 7; i >= 0; i--) {
+      const r = i / 7;
+      const [bx, by] = along(lerp(0.02, 0.6, r));
+      const [dx, dy] = dirAt(lerp(0, 0.75, r));
+      plume(sh, bx + ldx * 0.035, by + ldy * 0.035, dx, dy, lerp(0.13, 0.17, r) * scale, 0.075 * scale, { fill: P.mc[0], dark: P.mc[1], light: P.mc[2], barbs: false, tone: far, side });
+    }
+    // Bord festonné de l'aile
+    const band = new Path2D(), edge = [], rows = 7, width = 0.07 * scale;
+    for (let j = 0; j <= rows; j++) edge.push(along((j / rows) * 0.6));
+    band.moveTo(edge[0][0], edge[0][1]);
+    for (const q of edge) band.lineTo(q[0], q[1]);
+    let prev = null;
+    const inner = [];
+    for (let j = rows; j >= 0; j--) {
+      const taper = 1 - (j / rows) * 0.5;
+      const P2 = [edge[j][0] + ix * width * taper, edge[j][1] + iy * width * taper];
+      inner.push(P2);
+      if (!prev) band.lineTo(P2[0], P2[1]);
+      else band.quadraticCurveTo((prev[0] + P2[0]) / 2 + ix * 0.03 * scale, (prev[1] + P2[1]) / 2 + iy * 0.03 * scale, P2[0], P2[1]);
+      prev = P2;
+    }
+    band.closePath();
+    sh.push({ p: band, f: P.band, halo: true, tone: far });
+    if (detail > 0) {
+      const sc = new Path2D();
+      for (let j = 0; j < rows; j++) {
+        const a = lerp2(edge[j], inner[rows - j], 0.5), b = lerp2(edge[j + 1], inner[rows - j - 1], 0.5);
+        sc.moveTo(a[0], a[1]);
+        sc.quadraticCurveTo((a[0] + b[0]) / 2 + ix * 0.03 * scale, (a[1] + b[1]) / 2 + iy * 0.03 * scale, b[0], b[1]);
+      }
+      sh.push({ clip: band, parts: [{ p: sc, w: INK_W * 0.45 }] });
+    }
+    sh.push({ p: band, f: null, w: INK_W * 0.9 });
+    // Pointe de l'aile en feu
+    const f = Math.sin(time * 10 + o) * 0.5 + Math.sin(time * 6.3) * 0.5;
+    const len = (0.22 + 0.06 * f) * scale;
+    const hdx = Math.cos(thH), hdy = Math.sin(thH);
+    plume(sh, tx, ty, hdx, hdy, len, 0.05 * scale, { fill: far ? RED : ORANGE, light: GOLD, curl: o * 0.3 + 0.15 * f, flick: 1, split: -o * 0.6, barbs: false, tone: far });
+    out.push([tx + hdx * len, ty + hdy * len]);
+    detail = keep;
+  }
+
+  // Patte écailleuse, serres noires, culotte de plumes. k : 0 repliée (en vol) → 1 tendue.
+  function leg(sh, far, k, dX, dY, fX, fY) {
+    const hx = far ? -0.03 : 0.04, hy = 0.22;
+    const ax = lerp(hx + 0.1, hx + 0.02, k) + (far ? -0.02 : 0), ay = lerp(0.42, 0.62, k);
+    const kx = hx + 0.015, ky = hy + 0.12;
+    const col = far ? AMBER : GOLD;
+    const tar = ribbonW([[kx, ky], [lerp(kx, ax, 0.5) + 0.01, lerp(ky, ay, 0.5)], [ax, ay]], (v) => lerp(0.026, 0.019, v));
+    sh.push({ p: tar, f: col, halo: true, tone: far });
+    if (detail > 0) {
+      const sc = new Path2D();
+      for (let v = 0.25; v < 0.95; v += 0.15) {
+        const x = lerp(kx, ax, v), y = lerp(ky, ay, v);
+        sc.moveTo(x - 0.02, y - 0.006);
+        sc.quadraticCurveTo(x, y + 0.008, x + 0.02, y - 0.006);
+      }
+      sh.push({ clip: tar, parts: [{ p: sc, w: INK_W * 0.4 }] });
+    }
+    sh.push({ p: tar, f: null, w: INK_W * 0.8 });
+    const toeK = lerp(0.55, 1, k);
+    for (const [a, c] of [[-0.065, 0.006], [0.1, 0.01], [0.08, 0.034]]) {
+      const tx = ax + (fX * a + dX * c) * toeK, ty = ay + (fY * a + dY * c) * toeK, s = a > 0 ? 1 : -1;
+      sh.push({ p: ribbonW([[ax, ay], [(ax + tx) / 2, (ay + ty) / 2], [tx, ty]], (v) => lerp(0.014, 0.01, v)), f: col, w: INK_W * 0.7, halo: true });
+      const claw = new Path2D();
+      claw.moveTo(tx - dX * 0.012, ty - dY * 0.012);
+      claw.quadraticCurveTo(tx + fX * 0.035 * s, ty + fY * 0.035 * s, tx + fX * 0.014 * s + dX * 0.042, ty + fY * 0.014 * s + dY * 0.042);
+      claw.lineTo(tx + dX * 0.012, ty + dY * 0.012);
+      claw.closePath();
+      sh.push({ p: claw, f: INK, w: INK_W * 0.5, halo: true });
+    }
+    for (let i = 4; i >= 0; i--) {
+      const r = i / 4, sw = lerp(-0.25, 0.35, r);
+      const [dx, dy] = norm(dX - fX * sw, dY - fY * sw);
+      plume(sh, hx + lerp(-0.06, 0.07, r), hy - 0.02, dx, dy, lerp(0.17, 0.24, 1 - Math.abs(r - 0.5) * 2), 0.05, {
+        fill: far ? CRIMSON : i % 2 ? ORANGE : AMBER, dark: far ? EMBER : VERMILION, light: far ? RED : GOLD,
+        curl: i % 2 ? 0.25 : -0.25, flick: i % 2, barbs: false, tone: far,
+      });
+    }
+  }
+
+  // Plume de queue : tige fine, large vexille barbée, bout en flamme fourchue.
+  function tailPlume(sh, pts, back, j) {
+    const vane = (v) => 0.013 + 0.055 * clamp((v - 0.38) / 0.27, 0, 1) * (1 - clamp((v - 0.86) / 0.14, 0, 1));
+    const shape = ribbonW(pts, vane);
+    sh.push({ p: shape, f: back ? CRIMSON : j % 4 ? RED : VERMILION, halo: true, tone: back, hw: INK_W * 0.75 });
+    const parts = [{ p: ribbonW(pts.map(([x, y]) => [x + 0.008, y]), (v) => (v < 0.42 ? 0 : vane(v) * 0.42)), f: back ? RED : GOLD }];
+    if (detail > 0) {
+      const lines = new Path2D();
+      smoothTo(lines, pts.slice(2), true);
+      if (detail > 1) {
+        for (let n = 5; n < pts.length - 1; n++) {
+          const [x, y] = pts[n], [nx, ny] = pts[n + 1];
+          const [tx, ty] = norm(nx - x, ny - y);
+          const w = vane(n / (pts.length - 1)) * 1.1;
+          for (const s of [1, -1]) {
+            lines.moveTo(x, y);
+            lines.lineTo(x + tx * w * 0.9 - ty * w * s, y + ty * w * 0.9 + tx * w * s);
+          }
+        }
+      }
+      parts.push({ p: lines, w: INK_W * 0.38 });
+    }
+    sh.push({ clip: shape, parts });
+    sh.push({ p: shape, f: null, w: INK_W * 0.75 });
+    const end = pts[pts.length - 1], pre = pts[pts.length - 2];
+    const [ex, ey] = norm(end[0] - pre[0], end[1] - pre[1]);
+    const curl = (j % 2 ? 0.55 : -0.55) + Math.sin(time * 4 + j) * 0.12;
+    plume(sh, end[0] - ex * 0.02, end[1] - ey * 0.02, ex, ey, 0.22, 0.05, {
+      fill: back ? CRIMSON : RED, dark: back ? EMBER : CRIMSON, light: GOLD, curl, flick: 1, split: -Math.sign(curl) * 0.55, barbs: false, tone: back,
+    });
+    return [end[0] + ex * 0.22, end[1] + ey * 0.22];
+  }
+
+  function neckAt(pts, v) {
+    const n = pts.length - 1, f = clamp(v, 0, 1) * n, i = Math.min(n - 1, Math.floor(f)), u = f - i;
+    const a = pts[i], b = pts[i + 1];
+    const [tx, ty] = norm(b[0] - a[0], b[1] - a[1]);
+    return [lerp(a[0], b[0], u), lerp(a[1], b[1], u), tx, ty];
+  }
+
   function buildBird() {
     const sh = [], flight = [], crest = [];
     const { fold, e, face, tilt } = bird;
     const trail = Math.min(1, Math.hypot(bird.vx, bird.vy) / S / 3.5);
     const st = Math.sin(tilt), ct = Math.cos(tilt);
-    const dX = face * st, dY = ct;      // « bas » du monde, vu de l'oiseau
+    UPX = -face * st; UPY = -ct;
+    const dX = -UPX, dY = -UPY;         // bas
     const fX = ct, fY = -face * st;     // horizontale vers l'avant
     const k = (e + 1) / 2;
     const kh = k - 0.18 * Math.cos(bird.phase) * (1 - bird.glide) * (1 - fold);
@@ -567,48 +696,54 @@
     // Aile lointaine, plus sombre et tramée, levée derrière la tête
     wing(sh, 0.03, -0.24, clamp(k * 0.95 + 0.04, 0, 1), kh, 1, 0.82, true, flight);
 
-    // Queue : sept longues plumes qui tombent en cascade et s'enroulent au bout
+    // Queue : onze plumes en cascade, couche arrière puis couche avant
     const [bdx, bdy] = norm(lerp(-0.5, -0.22, fold), 1);
-    const ANG = [-0.42, -0.26, -0.12, 0, 0.12, 0.24, 0.36];
-    const LEN = [0.95, 1.15, 1.35, 1.45, 1.3, 1.1, 0.9];
-    const vane = (v) => 0.016 + 0.05 * clamp((v - 0.45) / 0.25, 0, 1) * (1 - clamp((v - 0.88) / 0.12, 0, 1));
-    for (const j of [0, 6, 1, 5, 2, 4, 3]) {
-      const a = ANG[j] * (1 - 0.25 * trail), ca = Math.cos(a), sa = Math.sin(a);
-      const dx = bdx * ca - bdy * sa, dy = bdx * sa + bdy * ca, px = -dy, py = dx;
+    for (const j of [1, 9, 3, 7, 5, 0, 10, 2, 8, 4, 6]) {
+      const back = j % 2 === 1;
+      const [dx, dy] = rot2(bdx, bdy, (j - 5) * 0.085 * (1 - 0.25 * trail));
+      const px = -dy, py = dx;
+      const len = (back ? 1.05 : 0.95) + 0.6 * (1 - Math.abs(j - 5) / 5) ** 1.2;
       const pts = [];
-      for (let n = 0; n <= 10; n++) {
-        const v = n / 10;
-        const wave = Math.sin(v * 3 - time * 3.2 + j * 0.9) * 0.09 * v;
-        pts.push([-0.08 + dx * LEN[j] * v + px * wave - trail * 0.45 * v * v, 0.33 + dy * LEN[j] * v + py * wave]);
+      for (let n = 0; n <= 11; n++) {
+        const v = n / 11;
+        const wave = Math.sin(v * 3 - time * 3.2 + j * 0.7) * 0.09 * v;
+        pts.push([-0.08 + dx * len * v + px * wave - trail * 0.45 * v * v, 0.33 + dy * len * v + py * wave]);
       }
-      const outer = j === 0 || j === 6;
-      sh.push({ p: ribbonW(pts, vane), f: outer ? CRIMSON : j % 2 ? RED : ORANGE, w: INK_W * 0.85, halo: true, tone: outer });
-      sh.push({ p: ribbonW(pts, (v) => (v < 0.5 ? 0 : vane(v) * 0.38)), f: outer ? RED : GOLD });
-      const end = pts[10], pre = pts[9];
-      const [ex, ey] = norm(end[0] - pre[0], end[1] - pre[1]);
-      const curl = (j % 2 ? 0.55 : -0.55) + Math.sin(time * 4 + j) * 0.12;
-      sh.push({ p: tongue(end[0] - ex * 0.02, end[1] - ey * 0.02, ex, ey, 0.2, 0.05, 1, curl), f: outer ? CRIMSON : RED, w: INK_W * 0.9, halo: true });
-      sh.push({ p: tongue(end[0], end[1], ex, ey, 0.12, 0.022, 0, curl * 0.8), f: GOLD });
-      flight.push([end[0] + ex * 0.2, end[1] + ey * 0.2]);
+      flight.push(tailPlume(sh, pts, back, j));
+    }
+    // Couvertures de la queue
+    for (let i = 6; i >= 0; i--) {
+      const r = i / 6;
+      const [dx, dy] = rot2(bdx, bdy, lerp(-0.7, 0.6, r));
+      plume(sh, -0.08 + lerp(-0.05, 0.05, r), 0.27, dx, dy, lerp(0.3, 0.42, 1 - Math.abs(r - 0.5) * 2), 0.07, {
+        fill: i % 2 ? VERMILION : ORANGE, dark: RED, light: GOLD, curl: i % 2 ? 0.3 : -0.3, flick: 1,
+      });
     }
 
     leg(sh, true, fold, dX, dY, fX, fY);
 
-    // Crinière de mèches le long de la nuque
+    // Cou en S, couvert d'un camail de plumes pointues
     const neckPts = [[0, -0.25], [0.085, -0.36], [0.07, -0.48], [0.11, -0.58], [0.19, -0.645]];
-    for (let i = 1; i < 4; i++) {
-      const [x, y] = neckPts[i];
-      const sway = Math.sin(time * 4 + i) * 0.1;
-      const [mx, my] = norm(-0.85, 0.35 + sway);
-      sh.push({ p: tongue(x - 0.03, y, mx, my, 0.13, 0.035, 0, -0.3), f: GOLD, w: INK_W * 0.85, halo: true });
+    const neckW = (v) => lerp(0.09, 0.055, v);
+    const neck = ribbonW(neckPts, neckW);
+    sh.push({ p: neck, f: ORANGE, halo: true });
+    sh.push({ clip: neck, parts: [{ p: ribbonW(neckPts.map(([x, y]) => [x + 0.04, y]), (v) => lerp(0.035, 0.018, v)), f: GOLD }] });
+    sh.push({ p: neck, f: null, w: INK_W });
+    for (let i = 0; i < 10; i++) {
+      const v = 0.04 + (0.9 * i) / 9;
+      const [x, y, tx, ty] = neckAt(neckPts, v);
+      const w = neckW(v), sway = Math.sin(time * 4 + i * 0.8) * 0.08;
+      const [hx, hy] = norm(-0.55 + sway, 0.85);
+      plume(sh, x + ty * w * 0.55, y - tx * w * 0.55, hx, hy, 0.13 + 0.07 * (1 - v), 0.048, {
+        fill: i % 2 ? GOLD : AMBER, dark: ORANGE, light: CREAM, curl: -0.3 + sway, flick: i % 3 === 0, barbs: false,
+      });
+      if (i % 2 === 0) {
+        const [gx, gy] = norm(0.3, 1);
+        plume(sh, x - ty * w * 0.4, y + tx * w * 0.4, gx, gy, 0.08, 0.03, { fill: GOLD, light: CREAM, curl: 0.2, barbs: false });
+      }
     }
-    // Cou en S
-    const neck = ribbonW(neckPts, (v) => lerp(0.085, 0.05, v));
-    sh.push({ p: neck, f: ORANGE, w: INK_W * 1.1, halo: true });
-    sh.push({ p: ribbonW(neckPts.map(([x, y]) => [x + 0.035, y]), (v) => lerp(0.03, 0.015, v)), f: GOLD, clip: neck });
-    sh.push({ p: neck, f: null, w: INK_W * 1.1 });
 
-    // Corps en goutte, poitrail bombé
+    // Corps en goutte, poitrail couvert de petites plumes
     const body = new Path2D();
     body.moveTo(0.06, -0.28);
     body.bezierCurveTo(0.22, -0.18, 0.24, 0.08, 0.12, 0.26);
@@ -616,88 +751,169 @@
     body.bezierCurveTo(-0.2, 0.2, -0.2, -0.12, -0.08, -0.28);
     body.bezierCurveTo(-0.04, -0.32, 0.02, -0.31, 0.06, -0.28);
     body.closePath();
-    sh.push({ p: body, f: ORANGE, w: INK_W * 1.15, halo: true });
+    sh.push({ p: body, f: ORANGE, halo: true });
     const back = new Path2D();
     back.moveTo(-0.08, -0.3);
     back.bezierCurveTo(-0.22, -0.1, -0.22, 0.2, -0.1, 0.4);
     back.lineTo(-0.02, 0.4);
     back.bezierCurveTo(-0.12, 0.2, -0.12, -0.1, -0.02, -0.3);
     back.closePath();
-    sh.push({ p: back, f: RED, clip: body, tone: true });
-    sh.push({ p: oval(0.11, -0.01, 0.085, 0.19, -0.2), f: GOLD, clip: body });
-    sh.push({ p: oval(0.14, -0.1, 0.035, 0.07, -0.2), f: CREAM, clip: body });
-    const scales = new Path2D();
-    for (const [x, y] of [[0.06, -0.14], [0.13, -0.12], [0.03, -0.03], [0.1, -0.01], [0.17, 0.0], [0.06, 0.09], [0.13, 0.1]]) {
-      scales.moveTo(x - 0.03, y);
-      scales.quadraticCurveTo(x, y + 0.035, x + 0.03, y);
+    const bodyParts = [{ p: back, f: RED, tone: true }, { p: oval(0.11, -0.01, 0.085, 0.19, -0.2), f: GOLD }];
+    if (detail > 0) {
+      const hatch = new Path2D();
+      for (let i = 0; i < 7; i++) {
+        const y = -0.2 + i * 0.075;
+        hatch.moveTo(-0.2, y + 0.04);
+        hatch.lineTo(-0.1, y - 0.02);
+      }
+      bodyParts.push({ p: hatch, w: INK_W * 0.4 });
     }
-    sh.push({ p: scales, f: null, w: INK_W * 0.6, clip: body });
-    sh.push({ p: body, f: null, w: INK_W * 1.15 });
+    const rows = [[0.22, [-0.05, 0.03, 0.1]], [0.12, [-0.08, 0, 0.08, 0.15]], [0.02, [-0.07, 0.01, 0.09, 0.17]], [-0.08, [-0.05, 0.03, 0.11, 0.18]], [-0.18, [-0.01, 0.06, 0.13]]];
+    for (const [y, xs] of rows) {
+      for (const x of xs) {
+        const lit = x > 0.06;
+        const [gx, gy] = norm(0.12, 1);
+        const fp = tongue(x, y - 0.05, gx, gy, 0.11, 0.036, 0, x > 0.04 ? 0.15 : -0.15);
+        bodyParts.push({ p: fp, f: lit ? GOLD : AMBER });
+        if (lit) bodyParts.push({ p: tongue(x - 0.008, y - 0.045, gx, gy, 0.07, 0.014, 0, 0.1), f: CREAM });
+        bodyParts.push({ p: fp, w: INK_W * 0.5 });
+      }
+    }
+    sh.push({ clip: body, parts: bodyParts });
+    sh.push({ p: body, f: null, w: INK_W * 1.1 });
+    // Franges du ventre
+    for (let i = 0; i < 6; i++) {
+      const r = i / 5;
+      const [dx, dy] = norm(lerp(-0.35, 0.1, r) + Math.sin(time * 3 + i) * 0.05, 1);
+      plume(sh, lerp(-0.13, 0.11, r), 0.29 + 0.05 * Math.sin(r * Math.PI), dx, dy, 0.15 + 0.05 * Math.sin(r * Math.PI), 0.05, {
+        fill: i % 2 ? ORANGE : AMBER, dark: VERMILION, light: GOLD, curl: i % 2 ? 0.3 : -0.3, flick: 1, barbs: false,
+      });
+    }
 
     leg(sh, false, fold, dX, dY, fX, fY);
+
+    // Flammes aux épaules
+    for (let i = 0; i < 3; i++) {
+      const f = Math.sin(time * 8 + i * 2) * 0.5 + 0.5;
+      plume(sh, -0.09 + i * 0.06, -0.26 - (i === 1 ? 0.02 : 0), UPX, UPY, 0.1 + 0.06 * f, 0.035, { fill: ORANGE, light: GOLD, curl: 0.3 * (f - 0.5), flick: 1, barbs: false });
+    }
 
     // Aile proche, levée vers l'arrière
     wing(sh, -0.08, -0.2, k, kh, -1, 1, false, flight);
 
-    // Aigrette de flammes
-    const CD = [[-0.45, -0.9], [-0.8, -0.6], [-0.97, -0.25], [-0.95, 0.15]];
-    const CL = [0.36, 0.44, 0.38, 0.3];
-    for (let i = 0; i < 4; i++) {
-      const sway = Math.sin(time * 3 + i * 0.9) * 0.12;
+    // Aigrette : six longues plumes fourchues, et le duvet du crâne
+    const CD = [[-0.3, -0.95], [-0.55, -0.82], [-0.78, -0.6], [-0.92, -0.36], [-0.98, -0.1], [-0.92, 0.2]];
+    const CL = [0.34, 0.46, 0.52, 0.46, 0.38, 0.3];
+    for (let i = 0; i < 6; i++) {
+      const sway = Math.sin(time * 3 + i * 0.9) * 0.1;
       let [dx, dy] = norm(lerp(CD[i][0], -1, trail * 0.5), lerp(CD[i][1], 0.05, trail * 0.5));
-      const c = Math.cos(sway), s = Math.sin(sway);
-      [dx, dy] = [dx * c - dy * s, dx * s + dy * c];
-      const curl = (i % 2 ? 0.35 : -0.35) + sway;
-      sh.push({ p: tongue(0.17, -0.69, dx, dy, CL[i], 0.04, 1, curl), f: RED, w: INK_W * 0.9, halo: true });
-      sh.push({ p: tongue(0.17 + dx * 0.02, -0.69 + dy * 0.02, dx, dy, CL[i] * 0.6, 0.018, 0, curl * 0.8), f: GOLD });
-      crest.push([0.17 + dx * CL[i], -0.69 + dy * CL[i]]);
+      [dx, dy] = rot2(dx, dy, sway);
+      const curl = (i % 2 ? 0.4 : -0.35) + sway;
+      plume(sh, 0.16, -0.7, dx, dy, CL[i], 0.042, { fill: i % 2 ? RED : VERMILION, dark: CRIMSON, light: GOLD, curl, flick: 1, split: i % 2 ? -0.5 : 0.5 });
+      crest.push([0.16 + dx * CL[i], -0.7 + dy * CL[i]]);
+    }
+    for (let i = 0; i < 3; i++) {
+      const [dx, dy] = norm(-0.8, -0.55 + i * 0.25);
+      plume(sh, 0.215 - i * 0.03, -0.722 + i * 0.006, dx, dy, 0.1, 0.03, { fill: GOLD, light: CREAM, curl: -0.2, barbs: false });
     }
 
     // Tête d'aigle, de profil
-    const head = oval(0.215, -0.655, 0.082, 0.062, -0.25);
-    sh.push({ p: head, f: ORANGE, w: INK_W * 1.1, halo: true });
-    sh.push({ p: oval(0.24, -0.69, 0.05, 0.026, -0.3), f: GOLD, clip: head });
-    sh.push({ p: oval(0.15, -0.63, 0.045, 0.04, 0), f: RED, clip: head, tone: true });
-    sh.push({ p: tongue(0.205, -0.655, -1, 0.18, 0.13, 0.016, 0, 0.2), f: RED, clip: head });
-    sh.push({ p: head, f: null, w: INK_W * 1.1 });
+    const head = new Path2D();
+    head.moveTo(0.13, -0.655);
+    head.bezierCurveTo(0.13, -0.71, 0.19, -0.735, 0.235, -0.725);
+    head.bezierCurveTo(0.265, -0.72, 0.285, -0.705, 0.295, -0.69);
+    head.lineTo(0.298, -0.648);
+    head.bezierCurveTo(0.27, -0.622, 0.22, -0.603, 0.18, -0.608);
+    head.bezierCurveTo(0.15, -0.613, 0.13, -0.63, 0.13, -0.655);
+    head.closePath();
+    sh.push({ p: head, f: ORANGE, halo: true });
+    const headParts = [
+      { p: oval(0.235, -0.708, 0.055, 0.018, -0.15), f: GOLD },
+      { p: oval(0.16, -0.632, 0.05, 0.04, 0), f: RED, tone: true },
+      { p: tongue(0.215, -0.668, -1, 0.15, 0.12, 0.014, 0, 0.25), f: RED },
+    ];
+    if (detail > 0) {
+      const hatch = new Path2D();
+      for (let i = 0; i < 4; i++) { hatch.moveTo(0.19 + i * 0.022, -0.6); hatch.lineTo(0.205 + i * 0.022, -0.625); }
+      headParts.push({ p: hatch, w: INK_W * 0.4 });
+    }
+    sh.push({ clip: head, parts: headParts });
+    sh.push({ p: head, f: null, w: INK_W });
+    // Plumes de joue, rabattues vers l'arrière
+    for (let i = 0; i < 3; i++) {
+      const [dx, dy] = norm(-1, 0.2 + i * 0.12);
+      plume(sh, 0.205 - i * 0.018, -0.647 + i * 0.01, dx, dy, 0.085 + i * 0.01, 0.022, { fill: GOLD, light: CREAM, curl: -0.25, barbs: false });
+    }
+    // Barbe de flammes sous le bec
+    for (let i = 0; i < 2; i++) {
+      const [dx, dy] = norm(-0.3 - i * 0.25, 1);
+      plume(sh, 0.24 - i * 0.03, -0.615, dx, dy, 0.08, 0.022, { fill: ORANGE, light: GOLD, curl: 0.3, flick: 1, barbs: false });
+    }
 
-    // Bec crochu, qui s'ouvre quand il sursaute
+    // Bec crochu : cire à la base, narine, pointe sombre ; il s'ouvre quand il sursaute
     const open = bird.beak * 0.035;
     const lower = new Path2D();
-    lower.moveTo(0.278, -0.648);
-    lower.quadraticCurveTo(0.32, -0.648 + open, 0.345, -0.64 + open * 1.3);
-    lower.quadraticCurveTo(0.31, -0.628 + open, 0.28, -0.632);
+    lower.moveTo(0.303, -0.655);
+    lower.quadraticCurveTo(0.345, -0.652 + open, 0.37, -0.643 + open * 1.3);
+    lower.quadraticCurveTo(0.34, -0.632 + open, 0.304, -0.636);
     lower.closePath();
-    sh.push({ p: lower, f: ORANGE, w: INK_W * 0.8, halo: true });
+    sh.push({ p: lower, f: AMBER, w: INK_W * 0.8, halo: true });
     const upper = new Path2D();
-    upper.moveTo(0.27, -0.7);
-    upper.quadraticCurveTo(0.35, -0.712, 0.39, -0.64);
-    upper.quadraticCurveTo(0.36, -0.655, 0.33, -0.655);
-    upper.quadraticCurveTo(0.3, -0.655, 0.272, -0.646);
+    upper.moveTo(0.3, -0.706);
+    upper.quadraticCurveTo(0.372, -0.716, 0.404, -0.645);
+    upper.quadraticCurveTo(0.395, -0.636, 0.386, -0.648);
+    upper.quadraticCurveTo(0.36, -0.66, 0.302, -0.654);
     upper.closePath();
-    sh.push({ p: upper, f: GOLD, w: INK_W * 0.8, halo: true });
+    sh.push({ p: upper, f: GOLD, halo: true });
+    sh.push({ clip: upper, parts: [
+      { p: oval(0.36, -0.652, 0.07, 0.012, 0.15), f: AMBER },
+      { p: circle(0.4, -0.648, 0.022), f: ORANGE },
+      { p: oval(0.34, -0.703, 0.04, 0.007, 0.1), f: CREAM },
+    ] });
+    sh.push({ p: upper, f: null, w: INK_W * 0.8 });
+    const cere = new Path2D();
+    cere.moveTo(0.284, -0.71);
+    cere.quadraticCurveTo(0.304, -0.712, 0.31, -0.694);
+    cere.lineTo(0.307, -0.655);
+    cere.quadraticCurveTo(0.293, -0.651, 0.283, -0.655);
+    cere.closePath();
+    sh.push({ p: cere, f: CREAM, w: INK_W * 0.6 });
+    sh.push({ p: oval(0.3, -0.686, 0.006, 0.0035, 0.3), f: INK });
 
-    // Œil en amande, reflet, trait de paupière, sourcil froncé
-    const openEye = bird.blinkT > 0 ? 0.06 : 1;
-    const ey0 = -0.672, Y = (y) => ey0 + (y - ey0) * openEye;
-    if (openEye > 0.5) {
+    // Arcade sourcilière, œil, paupières
+    const brow = new Path2D();
+    brow.moveTo(0.19, -0.698);
+    brow.quadraticCurveTo(0.24, -0.726, 0.298, -0.699);
+    brow.quadraticCurveTo(0.272, -0.69, 0.252, -0.687);
+    brow.quadraticCurveTo(0.22, -0.69, 0.19, -0.698);
+    brow.closePath();
+    const blink = bird.blinkT > 0;
+    if (!blink) {
       const eye = new Path2D();
-      eye.moveTo(0.2, -0.668);
-      eye.quadraticCurveTo(0.23, -0.699, 0.268, -0.682);
-      eye.quadraticCurveTo(0.24, -0.654, 0.2, -0.668);
+      eye.moveTo(0.207, -0.672);
+      eye.quadraticCurveTo(0.233, -0.692, 0.266, -0.68);
+      eye.quadraticCurveTo(0.24, -0.657, 0.207, -0.672);
       eye.closePath();
-      sh.push({ p: eye, f: GOLD, w: INK_W * 0.6 });
-      sh.push({ p: oval(0.243, -0.674, 0.011, 0.015, 0), f: INK, clip: eye });
-      sh.push({ p: circle(0.239, -0.681, 0.005), f: HALO, clip: eye });
+      sh.push({ p: eye, f: GOLD });
+      sh.push({ clip: eye, parts: [
+        { p: circle(0.241, -0.675, 0.0125), f: ORANGE },
+        { p: circle(0.242, -0.675, 0.0078), f: INK },
+        { p: circle(0.238, -0.679, 0.0042), f: HALO },
+        { p: circle(0.246, -0.671, 0.0021), f: HALO },
+      ] });
+      sh.push({ p: eye, f: null, w: INK_W * 0.55 });
+      const lid = new Path2D();
+      lid.moveTo(0.214, -0.667);
+      lid.quadraticCurveTo(0.24, -0.659, 0.262, -0.672);
+      sh.push({ p: lid, f: null, w: 0.006 });
     }
     const liner = new Path2D();
-    liner.moveTo(0.186, -0.664);
-    liner.quadraticCurveTo(0.225, Y(-0.707), 0.272, -0.684);
-    sh.push({ p: liner, f: null, w: 0.018 });
-    const brow = new Path2D();
-    brow.moveTo(0.196, -0.712);
-    brow.quadraticCurveTo(0.235, -0.72, 0.276, -0.7);
-    sh.push({ p: brow, f: null, w: 0.014 });
+    liner.moveTo(0.2, -0.669);
+    liner.quadraticCurveTo(0.232, blink ? -0.664 : -0.694, 0.27, -0.681);
+    liner.moveTo(0.207, -0.672);
+    liner.lineTo(0.186, -0.665);
+    sh.push({ p: liner, f: null, w: 0.016 });
+    sh.push({ p: brow, f: VERMILION, w: INK_W * 0.6 });
 
     anchorsLocal.flight = flight;
     anchorsLocal.crest = crest.concat(flight.slice(0, 3));
@@ -879,12 +1095,23 @@
     ctx.fillStyle = HALO;
     for (const s of shapes) {
       if (!s.halo) continue;
-      ctx.lineWidth = (s.w || INK_W) + HALO_W;
+      ctx.lineWidth = (s.hw || s.w || INK_W) + HALO_W;
       ctx.stroke(s.p);
       if (s.f) ctx.fill(s.p);
     }
     // Passe 2 : aplats, trames, traits
     for (const s of shapes) {
+      if (s.parts) {
+        ctx.save();
+        ctx.clip(s.clip);
+        for (const q of s.parts) {
+          if (q.f) { ctx.fillStyle = q.f; ctx.fill(q.p); }
+          if (q.tone && tone) { ctx.fillStyle = tone; ctx.fill(q.p); }
+          if (q.w) { ctx.strokeStyle = INK; ctx.lineWidth = q.w; ctx.stroke(q.p); }
+        }
+        ctx.restore();
+        continue;
+      }
       if (s.clip) { ctx.save(); ctx.clip(s.clip); }
       if (s.f) { ctx.fillStyle = s.f; ctx.fill(s.p); }
       if (s.tone && tone) { ctx.fillStyle = tone; ctx.fill(s.p); }
@@ -962,7 +1189,8 @@
     H = window.innerHeight;
     DPR = Math.min(window.devicePixelRatio || 1, 2);
     const wanted = parseFloat(opts.taille);
-    S = wanted > 0 ? clamp(wanted, 30, 300) : clamp(Math.min(W, H) * 0.085, 42, 80);
+    S = wanted > 0 ? clamp(wanted, 30, 300) : clamp(Math.min(W, H) * 0.1, 46, 96);
+    detail = S >= 62 ? 2 : S >= 44 ? 1 : 0;
     canvas.width = Math.round(W * DPR);
     canvas.height = Math.round(H * DPR);
     hit.style.width = `${(S * 0.96).toFixed(1)}px`;
