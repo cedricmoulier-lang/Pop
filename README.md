@@ -36,7 +36,7 @@ Les valeurs sont modifiables dans le tableau `CUTS` et l'objet `MEAL` en tête d
 
 ## Phénix manga
 
-`phenix-manga.js` est une mascotte autonome (sans dépendance) : un phénix dessiné à l'encre, façon manga, qui se promène sur n'importe quelle page HTML. Ajoutez avant `</body>` :
+`phenix-manga.js` est une mascotte autonome (sans dépendance) : un phénix de feu, plumage éclairé de l'intérieur et flammes animées, qui se promène sur n'importe quelle page HTML. Il vole par séries de battements (aile repliée à la remontée, rémiges écartées à la descente) entrecoupées de courts planés. Ajoutez avant `</body>` :
 
 ```html
 <script src="phenix-manga.js" defer></script>
