@@ -166,9 +166,9 @@
 <body>
 <main class="page">
   <header class="hero">
-    <p class="eyebrow">Mascotte pour page HTML · sans dépendance</p>
+    <p class="eyebrow">Mascotte 3D pour page HTML</p>
     <h1>Phénix</h1>
-    <p class="lede">Un oiseau de feu qui se promène sur votre page, le plumage éclairé de l’intérieur et des flammes plein les ailes. Il vole par séries de battements comme un rapace, se pose sur les titres, les cases et les boutons, s’envole quand on l’approche, et renaît de ses cendres si on clique dessus.</p>
+    <p class="lede">Un oiseau de feu en 3D qui se promène sur votre page. Ses ailes s’articulent à l’épaule, au coude et au poignet, chaque plume capte la lumière, et des flammes s’échappent de son plumage. Il vole par séries de battements comme un rapace, vire en s’inclinant, se pose sur les titres, les cases et les boutons, s’envole quand on l’approche, et renaît de ses cendres si on clique dessus.</p>
     <div class="actions">
       <button type="button" class="btn btn--ink" id="b-traverser">Traverser l’écran</button>
       <button type="button" class="btn" id="b-centre">Au centre</button>
@@ -195,11 +195,11 @@
       </li>
       <li class="tile phenix-perchoir">
         <h3>Il traverse l’écran</h3>
-        <p>Il vole jusqu’au centre, s’éloigne dans la profondeur de la page, se tourne vers vous, puis arrive comme un avion, ailes tendues, en grandissant jusqu’à passer à travers l’écran.</p>
+        <p>Il vole jusqu’au centre, s’enfonce dans la profondeur de la page, fait demi-tour au loin, puis revient droit sur vous comme un avion, ailes tendues, et passe derrière l’écran.</p>
       </li>
       <li class="tile phenix-perchoir">
         <h3>Il vire comme un oiseau</h3>
-        <p>Pour changer de direction, il freine, pivote ailes levées en prenant un peu de hauteur, puis repart de l’autre côté.</p>
+        <p>Pour changer de direction, il pivote dans la profondeur en s’inclinant dans le virage, le plus souvent en vous faisant face, puis repart de l’autre côté.</p>
       </li>
       <li class="tile phenix-perchoir">
         <h3>Il suit la page</h3>
@@ -210,9 +210,9 @@
 
   <section aria-labelledby="t-installer">
     <h2 id="t-installer">L’installer</h2>
-    <p>Placez <code>phenix-manga.js</code> à côté de votre page, puis ajoutez cette ligne juste avant <code>&lt;/body&gt;</code>. Aucune autre dépendance.</p>
+    <p>Placez <code>phenix.js</code> et <code>phenix-2d.js</code> à côté de votre page, puis ajoutez cette ligne juste avant <code>&lt;/body&gt;</code>. Le script charge three.js (environ 170 Ko compressés) depuis jsDelivr ; si WebGL ou le réseau manquent, il passe tout seul à la version 2D.</p>
     <div class="snippet">
-      <pre><code id="code">&lt;script src="phenix-manga.js" defer&gt;&lt;/script&gt;</code></pre>
+      <pre><code id="code">&lt;script src="phenix.js" defer&gt;&lt;/script&gt;</code></pre>
       <button type="button" class="btn" id="b-copier">Copier</button>
     </div>
     <p class="status" id="copie" role="status"></p>
@@ -225,7 +225,7 @@
       <table>
         <thead><tr><th scope="col">Attribut</th><th scope="col">Effet</th><th scope="col">Par défaut</th></tr></thead>
         <tbody>
-          <tr><td><code>data-taille</code></td><td>Taille de l’oiseau, en pixels (le corps et le cou ; ailes et queue en plus).</td><td>10 % du plus petit côté de l’écran, entre 46 et 96 (détail réduit en dessous de 62)</td></tr>
+          <tr><td><code>data-taille</code></td><td>Taille de l’oiseau, en pixels (le corps et le cou ; ailes et queue en plus).</td><td>13 % du plus petit côté de l’écran, entre 56 et 120</td></tr>
           <tr><td><code>data-perchoirs</code></td><td>Sélecteur CSS des éléments où il peut se poser.</td><td><code>h1, h2, h3, img, button, [data-phenix-perchoir], .phenix-perchoir</code></td></tr>
         </tbody>
       </table>
@@ -247,11 +247,11 @@
   </section>
 
   <footer>
-    <p>Phénix · un seul fichier, <code>phenix-manga.js</code>, dessiné et animé en direct sur un canvas.</p>
+    <p>Phénix · <code>phenix.js</code> (3D, three.js) et sa version de secours <code>phenix-2d.js</code>, animés en direct dans le navigateur.</p>
   </footer>
 </main>
 
-<script src="phenix-manga.js" defer></script>
+<script src="phenix.js" defer></script>
 <script>
   document.addEventListener('DOMContentLoaded', () => {
     const P = window.Phenix;

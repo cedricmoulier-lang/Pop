@@ -1,8 +1,9 @@
 /*!
- * Phénix : un oiseau de feu qui se promène sur une page HTML.
- * Sans dépendance. Ajoutez juste avant </body> :
+ * Phénix 2D : un oiseau de feu dessiné qui se promène sur une page HTML.
+ * C'est la version de secours de phenix.js (3D), chargée automatiquement quand WebGL
+ * ou three.js ne sont pas disponibles. Elle s'utilise aussi seule, sans dépendance :
  *
- *   <script src="phenix-manga.js" defer></script>
+ *   <script src="phenix-2d.js" defer></script>
  *
  * Réglages, en attributs de la balise <script> :
  *   data-taille="90"            taille de l'oiseau, en pixels
@@ -13,10 +14,12 @@
  */
 (() => {
   'use strict';
-  if (window.Phenix) return;
+  // Chargée par phenix.js, elle se branche sur l'API déjà en place ; seule, elle crée la sienne.
+  const host = window.Phenix && window.Phenix.__attach ? window.Phenix : null;
+  if (window.Phenix && !host) return;
 
   const script = document.currentScript;
-  const opts = (script && script.dataset) || {};
+  const opts = (host && host.__options) || (script && script.dataset) || {};
   const PERCHES = opts.perchoirs || 'h1, h2, h3, img, button, [data-phenix-perchoir], .phenix-perchoir';
   const TEXTUAL = 'h1, h2, h3, h4, h5, h6, p, a, span, li, label, strong, em';
 
@@ -1705,7 +1708,7 @@
     kick();
   }
 
-  window.Phenix = {
+  const api = {
     renaitre() { paused = false; burst(); kick(); },
     pause() { paused = true; },
     reprendre() { paused = false; kick(); },
@@ -1716,6 +1719,8 @@
     etat() { return { perch: 'posé', fly: 'en vol', hover: 'au centre', pass: 'traverse l’écran', away: 'traverse l’écran', dead: 'en cendres' }[bird.state]; },
   };
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
+  if (!host) window.Phenix = api;
+  const boot = () => { init(); if (host) host.__attach(api); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();
