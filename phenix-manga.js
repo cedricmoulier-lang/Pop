@@ -26,11 +26,6 @@
   const SHADE = 'rgba(112, 14, 24, 0.36)';        // ombre de chaque plume
   const SHINE = 'rgba(255, 246, 214, 0.5)';       // reflet de chaque plume
   const RACHIS = 'rgba(255, 234, 176, 0.7)';      // tige claire au centre des plumes
-  const MANGA_INK = '#1c1118';                    // lettrage et point d'exclamation
-  const HALO = '#fffdf6';
-  const GOLD = '#ffc42e';
-  const RED = '#e8342a';
-  const SFX_FONT = '"Dela Gothic One", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "Noto Sans JP", sans-serif';
   const INK_W = 0.013;        // épaisseur du trait, en fraction de la taille de l'oiseau
   const FOOT = [0.06, 0.62];  // point d'appui des serres, repère local
   // Feu : température 0 → 1, de la braise rouge sombre au blanc incandescent
@@ -110,13 +105,6 @@
     p.closePath();
     return p;
   }
-
-  const BANG = (() => {
-    const p = new Path2D();
-    p.moveTo(-0.17, -1); p.lineTo(0.17, -1); p.lineTo(0.07, 0.28); p.lineTo(-0.07, 0.28); p.closePath();
-    p.moveTo(0.15, 0.6); p.arc(0, 0.6, 0.15, 0, TAU);
-    return p;
-  })();
 
   /* ---------- État ---------- */
   let canvas, ctx, hit;
@@ -454,9 +442,10 @@
     // Le curseur s'approche : il sursaute, puis s'envole
     const pd = Math.hypot(pointer.x - bird.x, pointer.y - (bird.y - 0.1 * S));
     if (bird.startle <= 0 && pd < 1.25 * S && time - pointer.moved < 0.35) {
+      // Il sursaute : bec ouvert, ailes levées d'un coup, puis il s'envole
       bird.startle = 0.35;
       bird.beak = 1;
-      fx.push({ k: 'bang', life: 0, max: 0.7 });
+      bird.e = 1;
     }
     if (bird.startle > 0) {
       bird.startle -= dt;
@@ -503,7 +492,6 @@
         rand(1.4, 2.4), S * rand(0.25, 0.45), 0, 0);
     }
     fx.push({ k: 'flash', x: cx, y: cy, r: 3 * S, life: 0, max: 0.55 });
-    fx.push({ k: 'sfx', text: 'ボワッ!!', x: cx + bird.face * 0.6 * S, y: cy - 1.15 * S, rot: rand(-0.25, -0.1), size: 0.42 * S, fill: RED, life: 0, max: 0.95 });
   }
 
   function reborn() {
@@ -517,7 +505,6 @@
     pickTarget();
     fx.push({ k: 'flash', x: cx, y: cy, r: 2.2 * S, life: 0, max: 0.45 });
     sparksAt(cx, cy, 40, 2.5);
-    fx.push({ k: 'sfx', text: 'キラッ', x: cx - bird.face * 0.9 * S, y: cy - 1.2 * S, rot: rand(0.08, 0.2), size: 0.28 * S, fill: GOLD, life: 0, max: 0.8 });
   }
 
   /* ---------- Flammes qui sortent du plumage ---------- */
@@ -1151,24 +1138,6 @@
     ctx.globalCompositeOperation = 'source-over';
   }
 
-  // Lettrage et point d'exclamation : les deux touches manga restantes.
-  function inked(p, fill, lw, unit) {
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = HALO;
-    ctx.lineWidth = lw + (0.05 * S) / unit;
-    ctx.stroke(p);
-    ctx.fillStyle = fill;
-    ctx.fill(p);
-    ctx.strokeStyle = MANGA_INK;
-    ctx.lineWidth = lw;
-    ctx.stroke(p);
-  }
-  function place(x, y, unit, rot) {
-    ctx.setTransform(DPR * unit, 0, 0, DPR * unit, DPR * x, DPR * y);
-    if (rot) ctx.rotate(rot);
-  }
-
   function drawFx() {
     for (const f of fx) {
       const a = f.life / f.max;
@@ -1187,36 +1156,6 @@
         ctx.fill();
         ctx.globalCompositeOperation = 'source-over';
         mark(f.x, f.y, r);
-      } else if (f.k === 'sfx') {
-        const pop = a < 0.15 ? 0.4 + (a / 0.15) * 0.75 : a < 0.25 ? 1.15 - ((a - 0.15) / 0.1) * 0.15 : a > 0.8 ? 1 - (a - 0.8) / 0.2 : 1;
-        if (pop <= 0.02) continue;
-        place(f.x, f.y, 1, f.rot);
-        ctx.scale(pop, pop);
-        ctx.font = `${Math.round(f.size)}px ${SFX_FONT}`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.lineJoin = 'round';
-        ctx.strokeStyle = HALO; ctx.lineWidth = f.size * 0.3; ctx.strokeText(f.text, 0, 0);
-        ctx.strokeStyle = MANGA_INK; ctx.lineWidth = f.size * 0.13; ctx.strokeText(f.text, 0, 0);
-        ctx.fillStyle = f.fill; ctx.fillText(f.text, 0, 0);
-        mark(f.x, f.y, f.size * 3);
-      } else if (f.k === 'bang') {
-        if (bird.state === 'dead') continue;
-        const [hx, hy] = toWorld(0.42, -0.98);
-        const pop = a < 0.2 ? 0.5 + (a / 0.2) * 0.6 : a > 0.8 ? 1.1 * (1 - (a - 0.8) / 0.2) : 1.1;
-        const u = 0.26 * S * pop;
-        if (u < 1) continue;
-        const inkPx = 0.024 * S;
-        place(hx, hy, u, bird.face * 0.18);
-        inked(BANG, GOLD, inkPx / u, u);
-        ctx.strokeStyle = MANGA_INK; ctx.lineWidth = (inkPx * 1.2) / u;
-        ctx.beginPath();
-        for (const ang of [-2.4, -1.57, -0.74]) {
-          const c = Math.cos(ang), s = Math.sin(ang);
-          ctx.moveTo(c * 1.3, s * 1.3 - 0.3); ctx.lineTo(c * 1.8, s * 1.8 - 0.3);
-        }
-        ctx.stroke();
-        mark(hx, hy, u * 2.2);
       }
     }
   }

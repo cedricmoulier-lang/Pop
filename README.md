@@ -34,7 +34,7 @@ Les valeurs sont modifiables dans le tableau `CUTS` et l'objet `MEAL` en tête d
 - La frise du bas permet de sauter à une phase : cendres, embrasement, envol, combustion.
 - Espace met en pause. Avec « réduire les animations » activé, la page s'ouvre en pause.
 
-## Phénix manga
+## Phénix qui se promène sur la page
 
 `phenix-manga.js` est une mascotte autonome (sans dépendance) : un phénix de feu, plumage éclairé de l'intérieur et flammes animées, qui se promène sur n'importe quelle page HTML. Il vole par séries de battements (aile repliée à la remontée, rémiges écartées à la descente) entrecoupées de courts planés. Ajoutez avant `</body>` :
 

@@ -9,14 +9,13 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-  /* Mise en page : une planche de manga en une colonne ; titre sur lignes de concentration, puis cases encrées. */
+  /* Mise en page : une colonne ; grand titre où le phénix se pose au départ, puis cases encrées. */
   :root {
     --paper: #faf7f0;
     --panel: #ffffff;
     --ink: #17111a;
     --ink-soft: #4d434b;
     --tone: rgba(23, 17, 26, 0.16);
-    --tone-soft: rgba(23, 17, 26, 0.08);
     --fire: #d92e22;
     --fire-wash: #ffe4c7;
     --font-display: "Dela Gothic One", "Arial Black", "Hiragino Sans", sans-serif;
@@ -30,7 +29,6 @@
       --ink: #f3ece3;
       --ink-soft: #c2b6bc;
       --tone: rgba(243, 236, 227, 0.13);
-      --tone-soft: rgba(243, 236, 227, 0.07);
       --fire: #ff6445;
       --fire-wash: #3a1b1b;
       color-scheme: dark;
@@ -42,7 +40,6 @@
     --ink: #f3ece3;
     --ink-soft: #c2b6bc;
     --tone: rgba(243, 236, 227, 0.13);
-    --tone-soft: rgba(243, 236, 227, 0.07);
     --fire: #ff6445;
     --fire-wash: #3a1b1b;
     color-scheme: dark;
@@ -76,16 +73,6 @@
     display: grid;
     gap: 1.1rem;
     padding-block: clamp(150px, 24vh, 220px) 2.5rem;
-    isolation: isolate;
-  }
-  .hero::before {
-    content: "";
-    position: absolute;
-    inset: 0 calc(-1 * clamp(16px, 4vw, 40px));
-    z-index: -1;
-    background: repeating-conic-gradient(from 3deg at 46% 30%, var(--tone-soft) 0deg 1.3deg, transparent 1.3deg 5deg);
-    -webkit-mask-image: radial-gradient(ellipse 75% 70% at 46% 30%, transparent 0 28%, #000 80%);
-    mask-image: radial-gradient(ellipse 75% 70% at 46% 30%, transparent 0 28%, #000 80%);
   }
   .eyebrow {
     font-weight: 700;
@@ -95,23 +82,11 @@
     color: var(--fire);
   }
   h1 {
-    display: flex;
-    align-items: flex-start;
-    gap: .2em;
     font-size: clamp(3.4rem, 12vw, 7.5rem);
     line-height: .95;
     letter-spacing: -0.01em;
   }
-  .kanji {
-    writing-mode: vertical-rl;
-    font-size: .32em;
-    line-height: 1;
-    letter-spacing: .08em;
-    color: var(--fire);
-    padding-top: .25em;
-  }
   .lede { max-width: 38rem; font-size: clamp(1.05rem, 2vw, 1.2rem); }
-  .credit { font-size: .9rem; color: var(--ink-soft); }
   .actions { display: flex; flex-wrap: wrap; gap: .6rem; padding-top: .4rem; }
 
   .btn {
@@ -133,7 +108,7 @@
   h2 { font-size: clamp(1.7rem, 4.2vw, 2.4rem); }
   section > p { max-width: 40rem; }
 
-  /* Cases de manga */
+  /* Cases : une par comportement */
   .strip {
     list-style: none;
     margin: 0;
@@ -142,38 +117,20 @@
     grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));
     gap: 12px;
   }
-  .koma {
+  .tile {
     position: relative;
     display: grid;
-    align-content: end;
+    align-content: start;
     gap: .5rem;
-    min-height: 15rem;
+    min-height: 10rem;
     min-width: 0;
     padding: 1.1rem 1.1rem 1.2rem;
     border: 3px solid var(--ink);
     background: var(--panel);
     overflow: hidden;
   }
-  .koma:nth-child(2), .koma:nth-child(3) {
-    background-image: radial-gradient(var(--tone) 1.2px, transparent 1.5px);
-    background-size: 7px 7px;
-  }
-  .koma h3 { font-size: 1.25rem; }
-  .koma p { font-size: .95rem; color: var(--ink-soft); }
-  .sfx {
-    position: absolute;
-    top: .4rem;
-    right: .6rem;
-    font-family: var(--font-display);
-    font-size: 2.9rem;
-    line-height: 1;
-    color: var(--panel);
-    -webkit-text-stroke: 3px var(--ink);
-    paint-order: stroke fill;
-    transform: rotate(-9deg);
-    pointer-events: none;
-  }
-  .koma:nth-child(3) .sfx { color: var(--fire); }
+  .tile h3 { font-size: 1.25rem; }
+  .tile p { font-size: .95rem; color: var(--ink-soft); }
 
   .snippet {
     display: flex;
@@ -210,9 +167,8 @@
 <main class="page">
   <header class="hero">
     <p class="eyebrow">Mascotte pour page HTML · sans dépendance</p>
-    <h1>Phénix <span class="kanji" lang="ja">火の鳥</span></h1>
+    <h1>Phénix</h1>
     <p class="lede">Un oiseau de feu qui se promène sur votre page, le plumage éclairé de l’intérieur et des flammes plein les ailes. Il vole par séries de battements comme un rapace, se pose sur les titres, les cases et les boutons, s’envole quand on l’approche, et renaît de ses cendres si on clique dessus.</p>
-    <p class="credit">Clin d’œil au <i>Hi no Tori</i>, l’oiseau de feu d’Osamu Tezuka.</p>
     <div class="actions">
       <button type="button" class="btn btn--ink" id="b-renaitre">Le faire renaître</button>
       <button type="button" class="btn" id="b-pause">Pause</button>
@@ -223,23 +179,19 @@
   <section aria-labelledby="t-fait">
     <h2 id="t-fait">Ce qu’il fait</h2>
     <ol class="strip">
-      <li class="koma phenix-perchoir">
-        <span class="sfx" lang="ja" aria-hidden="true">スッ</span>
+      <li class="tile phenix-perchoir">
         <h3>Il se pose</h3>
         <p>Sur les titres, les images, les boutons, ou tout élément marqué <code>data-phenix-perchoir</code>.</p>
       </li>
-      <li class="koma phenix-perchoir">
-        <span class="sfx" lang="ja" aria-hidden="true">ビクッ</span>
+      <li class="tile phenix-perchoir">
         <h3>Il s’effraie</h3>
-        <p>Approchez le curseur : un point d’exclamation, et il file ailleurs.</p>
+        <p>Approchez le curseur : il sursaute, bec ouvert, et file ailleurs.</p>
       </li>
-      <li class="koma phenix-perchoir">
-        <span class="sfx" lang="ja" aria-hidden="true">ボワッ</span>
+      <li class="tile phenix-perchoir">
         <h3>Il renaît</h3>
         <p>Un clic sur lui : il s’embrase en boule de feu, part en fumée, puis renaît d’une colonne de flammes.</p>
       </li>
-      <li class="koma phenix-perchoir">
-        <span class="sfx" lang="ja" aria-hidden="true">キラッ</span>
+      <li class="tile phenix-perchoir">
         <h3>Il suit la page</h3>
         <p>Posé, il reste sur son élément quand vous faites défiler. Si l’élément sort de l’écran, il reprend son vol.</p>
       </li>
