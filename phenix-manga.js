@@ -119,7 +119,7 @@
   const pointer = { x: -1e5, y: -1e5, moved: -1e5 };
   const bird = {
     x: -400, y: 200, vx: 0, vy: 0, bob: 0, face: 1, tilt: 0, lean: 0,
-    yaw: 1, yawTarget: 1, sq: 1, zs: 1, passT: 0, lastCenter: -99,
+    yaw: 1, yawTarget: 1, sq: 1, zs: 1, passT: 0, lastCenter: -99, front: false,
     phase: 0, glide: 0, gliding: false, glideT: 0, beats: 6, up: 0, tailSpread: 0.7,
     fold: 0, e: 0, breath: 0,
     blinkT: 0, nextBlink: 2, beak: 0, stretch: 0, nextStretch: 8,
@@ -475,27 +475,45 @@
     bird.passT = 0;
   }
 
+  const APPROACH = 2.2; // durée du piqué vers l'écran, en secondes
+
   function updatePass(dt) {
     const t = (bird.passT += dt);
-    hoverPose(dt);
     const cx = W / 2, cy = H / 2, far = cy - 0.6 * S;
-    let ty = cy;
-    if (t < 0.6) {
-      bird.zs = 1;
-    } else if (t < 1.8) {
-      const u = (t - 0.6) / 1.2, v = u * u * (3 - 2 * u);
-      bird.zs = lerp(1, 0.3, v);
-      ty = lerp(cy, far, v);
+    let tx = cx, ty = cy;
+    if (t < 1.8) {
+      hoverPose(dt);
+      bird.front = false;
+      if (t >= 0.6) {
+        const u = (t - 0.6) / 1.2, v = u * u * (3 - 2 * u);
+        bird.zs = lerp(1, 0.3, v);
+        ty = lerp(cy, far, v);
+      } else {
+        bird.zs = 1;
+      }
     } else if (t < 2.1) {
+      // Au loin, il pivote pour nous faire face : la vue de profil se resserre, la vue de face s'ouvre
+      hoverPose(dt);
       bird.zs = 0.3;
       ty = far;
+      const u = (t - 1.8) / 0.3;
+      bird.front = u >= 0.5;
+      bird.sq = u < 0.5 ? lerp(1, 0.2, u / 0.5) : lerp(0.2, 1, (u - 0.5) / 0.5);
+      if (bird.front) { bird.tilt = 0; bird.bob = 0; }
     } else {
-      const u = Math.min(1, (t - 2.1) / 1.3);
-      bird.zs = 0.3 * Math.pow(9 / 0.3, u ** 1.8); // perspective : il grossit de plus en plus vite
-      ty = lerp(far, cy - 0.12 * H, u);
+      // Comme un avion : ailes tendues à plat, sans battre, il plane droit sur nous en roulant un peu
+      const u = Math.min(1, (t - 2.1) / APPROACH);
+      bird.front = true;
+      bird.face = 1;
+      bird.sq = 1;
+      bird.zs = 0.3 * Math.pow(9 / 0.3, u ** 2); // perspective : il grossit de plus en plus vite
+      bird.tilt = 0.1 * Math.sin(time * 1.7) + 0.04 * Math.sin(time * 4.3);
+      bird.bob = 0;
+      tx = cx + Math.sin(time * 1.1) * 0.25 * S * bird.zs * (1 - u);
+      ty = lerp(far, cy - 0.15 * H, u ** 1.5);
       if (u >= 1) { passThrough(); return; }
     }
-    bird.x += (cx - bird.x) * Math.min(1, dt * 4);
+    bird.x += (tx - bird.x) * Math.min(1, dt * 4);
     bird.y += (ty - bird.y) * Math.min(1, dt * 4);
     bird.vx = 0;
     bird.vy = 0;
@@ -518,12 +536,15 @@
     bird.state = 'away';
     bird.timer = 0.9;
     bird.zs = 1;
+    bird.front = false;
+    bird.tilt = 0;
   }
 
   function reenter() {
     const fromLeft = Math.random() < 0.5;
     bird.state = 'fly';
     bird.zs = 1;
+    bird.front = false;
     faceNow(fromLeft ? 1 : -1);
     bird.x = fromLeft ? -1.8 * S : W + 1.8 * S;
     bird.y = rand(0.3, 0.6) * H;
@@ -666,13 +687,14 @@
   function emit(dt) {
     if (reduce.matches || bird.state === 'dead' || bird.state === 'away' || !spawnW.length) return;
     const flying = bird.state !== 'perch';
-    const z = Math.min(bird.zs, 4); // plus loin : flammes plus petites ; plus près : plus grandes
+    const z = Math.min(bird.zs, 2.5); // plus loin : flammes plus petites ; plus près : plus grandes
+    const frontShare = bird.zs > 1.5 ? 0.06 : 0.3; // en gros plan, les flammes restent derrière lui
     emitN((flying ? 1100 : 650) * quality * dt, () => {
       const p = spawnW[(Math.random() * spawnW.length) | 0];
       spawnP(FLAME,
         p[0] + rand(-1, 1) * S * 0.015 * z, p[1] + rand(-1, 1) * S * 0.015 * z,
         bird.vx * 0.12 + rand(-0.15, 0.15) * S * z, bird.vy * 0.12 - rand(0.1, 0.4) * S * z,
-        rand(0.25, 0.6), S * rand(0.07, 0.16) * z, clamp(p[2] * rand(0.85, 1.05), 0, 1), Math.random() < 0.3 ? 1 : 0);
+        rand(0.25, 0.6), S * rand(0.07, 0.16) * z, clamp(p[2] * rand(0.85, 1.05), 0, 1), Math.random() < frontShare ? 1 : 0);
     });
     emitN((flying ? 22 : 8) * dt, () => {
       const p = spawnW[(Math.random() * spawnW.length) | 0];
@@ -986,10 +1008,202 @@
     return [lerp(a[0], b[0], u), lerp(a[1], b[1], u), tx, ty];
   }
 
+  // Point situé à la fraction u de la longueur d'une ligne brisée.
+  function alongPoly(pts, u) {
+    let total = 0;
+    const seg = [];
+    for (let i = 1; i < pts.length; i++) {
+      const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      seg.push(d);
+      total += d;
+    }
+    let d = clamp(u, 0, 1) * total;
+    for (let i = 0; i < seg.length; i++) {
+      if (d <= seg[i] || i === seg.length - 1) return lerp2(pts[i], pts[i + 1], seg[i] ? Math.min(1, d / seg[i]) : 0);
+      d -= seg[i];
+    }
+    return pts[pts.length - 1];
+  }
+
+  // Vue de face, ailes tendues comme un avion : pour quand il fonce vers l'écran.
+  // On le voit légèrement par-dessous : dessous des ailes, poitrail, serres repliées.
+  function buildFront(sh) {
+    UPX = 0;
+    UPY = -1;
+    const flex = 0.025 * Math.sin(time * 3.1);
+
+    // Queue en éventail derrière le corps, raccourcie par la perspective
+    for (const i of [0, 6, 1, 5, 2, 4, 3]) {
+      const [dx, dy] = rot2(0, 1, (i - 3) * 0.2);
+      plume(sh, dx * 0.05, 0.15, dx, dy, 0.42 - Math.abs(i - 3) * 0.03, 0.07, {
+        fill: M.tail, curl: (i - 3) * 0.06 + Math.sin(time * 4 + i) * 0.05, flick: 1, split: i % 2 ? 0.4 : -0.4, lines: false, heat: 0.75,
+      });
+    }
+
+    // Ailes à plat, légèrement relevées vers le bout
+    for (const s of [-1, 1]) {
+      const P = [[0.09 * s, -0.04], [0.55 * s, -0.1], [0.95 * s, -0.13 + flex], [1.3 * s, -0.23 + flex * 2]];
+      // Rémiges secondaires : le bord de fuite, vu par-dessous
+      for (let i = 8; i >= 0; i--) {
+        const u = i / 8;
+        const [bx, by] = alongPoly(P.slice(0, 3), u);
+        const [dx, dy] = norm(0.18 * s, 1);
+        plume(sh, bx, by, dx, dy, lerp(0.22, 0.15, u), 0.08, { fill: M.core, curl: 0.1 * s, side: s, heat: 0.85 });
+      }
+      // Rémiges primaires : grandes plumes écartées comme des doigts au bout de l'aile
+      for (let i = 4; i >= 0; i--) {
+        const [bx, by] = alongPoly(P.slice(2), 0.1 + i * 0.13);
+        const ang = -0.02 - i * 0.13 + flex;
+        const len = 0.3 + 0.03 * (2 - Math.abs(i - 2));
+        const tip = plume(sh, bx, by, Math.cos(ang) * s, Math.sin(ang), len, 0.062, { fill: M.core, curl: -0.12 * s, side: s, heat: 0.75 });
+        addSpawn(tip[0], tip[1], 1);
+        addSpawn(tip[0], tip[1], 1);
+      }
+      // Couvertures le long du bord d'attaque, festonnées
+      const N = 10, top = [], bot = [];
+      for (let j = 0; j <= N; j++) {
+        const u = j / N, [x, y] = alongPoly(P, u * 0.86);
+        top.push([x, y]);
+        bot.push([x, y + lerp(0.12, 0.04, u)]);
+      }
+      const band = new Path2D();
+      smoothTo(band, top, true);
+      let prev = bot[N];
+      band.lineTo(prev[0], prev[1]);
+      for (let j = N - 1; j >= 0; j--) {
+        const q = bot[j];
+        band.quadraticCurveTo((prev[0] + q[0]) / 2, (prev[1] + q[1]) / 2 + 0.028, q[0], q[1]);
+        prev = q;
+      }
+      band.closePath();
+      sh.push({ p: band, f: M.core });
+      const bandParts = [{ p: ribbonW(top.map(([x, y]) => [x, y + 0.012]), (v) => lerp(0.022, 0.008, v)), f: SHINE }];
+      if (detail > 0) {
+        const sc = new Path2D();
+        for (let j = 0; j < N; j++) {
+          const a = lerp2(top[j], bot[j], 0.55), b = lerp2(top[j + 1], bot[j + 1], 0.55);
+          sc.moveTo(a[0], a[1]);
+          sc.quadraticCurveTo((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 0.02, b[0], b[1]);
+        }
+        bandParts.push({ p: sc, w: INK_W * 0.6, c: INK_SOFT });
+      }
+      sh.push({ clip: band, parts: bandParts });
+      sh.push({ p: band, w: INK_W });
+    }
+
+    // Poitrail
+    const body = oval(0, 0.04, 0.14, 0.2, 0);
+    sh.push({ p: body, f: M.core });
+    const bodyParts = [
+      { p: oval(-0.13, 0.06, 0.07, 0.22, 0), f: SHADE },
+      { p: oval(0.13, 0.06, 0.07, 0.22, 0), f: SHADE },
+      { p: oval(0, -0.02, 0.06, 0.12, 0), f: SHINE },
+    ];
+    for (const [y, xs] of [[0.2, [-0.06, 0.02]], [0.12, [-0.09, -0.02, 0.05]], [0.04, [-0.1, -0.03, 0.04, 0.1]], [-0.04, [-0.08, -0.01, 0.06]], [-0.11, [-0.04, 0.03]]]) {
+      for (const x of xs) {
+        const fp = tongue(x + 0.02, y - 0.05, 0, 1, 0.1, 0.035, 0, x > 0 ? 0.12 : -0.12);
+        bodyParts.push({ p: fp, f: Math.abs(x) < 0.05 ? 'rgba(255,240,190,0.26)' : 'rgba(150,30,20,0.16)' });
+        bodyParts.push({ p: fp, w: INK_W * 0.6, c: INK_SOFT });
+      }
+    }
+    sh.push({ clip: body, parts: bodyParts });
+    sh.push({ p: body, w: INK_W * 1.2 });
+    addSpawn(0, -0.05, 1);
+    addSpawn(-0.1, 0.1, 1);
+    addSpawn(0.1, 0.1, 1);
+
+    // Serres repliées sous le corps
+    for (const s of [-1, 1]) {
+      const ax = 0.055 * s, ay = 0.25;
+      sh.push({ p: ribbonW([[0.045 * s, 0.17], [ax, ay]], () => 0.022), f: M.leg, w: INK_W });
+      const claws = new Path2D();
+      for (const c of [-0.025, 0, 0.025]) {
+        claws.moveTo(ax + c - 0.008, ay);
+        claws.quadraticCurveTo(ax + c, ay + 0.045, ax + c - 0.012 * s, ay + 0.05);
+        claws.lineTo(ax + c + 0.008, ay);
+        claws.closePath();
+      }
+      sh.push({ p: claws, f: '#1d0b0d', w: INK_W * 0.5 });
+    }
+
+    // Collerette autour du cou
+    for (let i = 0; i < 7; i++) {
+      const a = (i - 3) * 0.32;
+      const [dx, dy] = rot2(0, 1, a);
+      plume(sh, Math.sin(a) * 0.06, -0.15, dx, dy, 0.1, 0.04, { curl: (i - 3) * 0.05, lines: false, heat: 1 });
+    }
+
+    // Aigrette qui se dresse au-dessus de la tête
+    for (const i of [0, 4, 1, 3, 2]) {
+      const [dx, dy] = rot2(0, -1, (i - 2) * 0.34 + Math.sin(time * 3 + i) * 0.05);
+      plume(sh, dx * 0.03, -0.27, dx, dy, 0.3 - Math.abs(i - 2) * 0.03, 0.04, {
+        curl: (i - 2) * 0.12, flick: 1, split: i < 2 ? -0.45 : 0.45, heat: 0.9,
+      });
+    }
+
+    // Tête de face
+    const head = oval(0, -0.215, 0.085, 0.08, 0);
+    sh.push({ p: head, f: M.core });
+    const headParts = [
+      { p: oval(0, -0.265, 0.05, 0.02, 0), f: SHINE },
+      { p: oval(-0.075, -0.19, 0.04, 0.05, 0), f: SHADE },
+      { p: oval(0.075, -0.19, 0.04, 0.05, 0), f: SHADE },
+      { p: tongue(-0.06, -0.225, -1, 0.12, 0.06, 0.012, 0, -0.2), f: 'rgba(190,30,26,0.85)' },
+      { p: tongue(0.06, -0.225, 1, 0.12, 0.06, 0.012, 0, 0.2), f: 'rgba(190,30,26,0.85)' },
+    ];
+    sh.push({ clip: head, parts: headParts });
+    sh.push({ p: head, w: INK_W });
+    for (const s of [-1, 1]) {
+      if (bird.blinkT <= 0) {
+        const eye = new Path2D();
+        eye.moveTo(0.018 * s, -0.222);
+        eye.quadraticCurveTo(0.04 * s, -0.242, 0.066 * s, -0.236);
+        eye.quadraticCurveTo(0.044 * s, -0.214, 0.018 * s, -0.222);
+        eye.closePath();
+        sh.push({ p: eye, f: '#ffcf3a' });
+        sh.push({ clip: eye, parts: [
+          { p: circle(0.043 * s, -0.229, 0.011), f: '#e0841c' },
+          { p: circle(0.043 * s, -0.229, 0.0068), f: '#140608' },
+          { p: circle(0.04 * s, -0.233, 0.0035), f: '#ffffff' },
+        ] });
+        sh.push({ p: eye, w: INK_W * 0.8, c: '#2a080c' });
+      } else {
+        const lid = new Path2D();
+        lid.moveTo(0.018 * s, -0.222);
+        lid.quadraticCurveTo(0.042 * s, -0.226, 0.066 * s, -0.236);
+        sh.push({ p: lid, w: 0.01, c: '#2a080c' });
+      }
+      // Arcades en V au-dessus des yeux
+      const brow = new Path2D();
+      brow.moveTo(0.012 * s, -0.236);
+      brow.quadraticCurveTo(0.04 * s, -0.262, 0.074 * s, -0.247);
+      brow.quadraticCurveTo(0.045 * s, -0.248, 0.012 * s, -0.236);
+      brow.closePath();
+      sh.push({ p: brow, f: '#c4401c', w: INK_W * 0.8 });
+    }
+    // Bec vu de face : cire, narines, bec crochu pointé vers nous
+    sh.push({ p: oval(0, -0.214, 0.024, 0.011, 0), f: '#ffe7a0', w: INK_W * 0.8 });
+    sh.push({ p: oval(-0.01, -0.214, 0.004, 0.0028, 0), f: '#2a0a0c' });
+    sh.push({ p: oval(0.01, -0.214, 0.004, 0.0028, 0), f: '#2a0a0c' });
+    const beak = new Path2D();
+    beak.moveTo(-0.024, -0.206);
+    beak.quadraticCurveTo(-0.027, -0.175, 0, -0.145);
+    beak.quadraticCurveTo(0.027, -0.175, 0.024, -0.206);
+    beak.closePath();
+    sh.push({ p: beak, f: M.beak });
+    sh.push({ clip: beak, parts: [
+      { p: oval(0, -0.15, 0.02, 0.02, 0), f: 'rgba(90,30,10,0.5)' },
+      { p: ribbonW([[0, -0.205], [0, -0.16]], () => 0.004), f: SHINE },
+    ] });
+    sh.push({ p: beak, w: INK_W });
+    return sh;
+  }
+
   function buildBird() {
     const sh = [];
     spawnLocal.length = 0;
     M = materials();
+    if (bird.front) return buildFront(sh);
     const { fold, e, face, tilt } = bird;
     const lean = Math.max(0, tilt * face);
     const trail = Math.min(1, Math.hypot(bird.vx, bird.vy) / S / 3.5);
