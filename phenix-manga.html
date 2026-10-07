@@ -170,7 +170,9 @@
     <h1>Phénix</h1>
     <p class="lede">Un oiseau de feu qui se promène sur votre page, le plumage éclairé de l’intérieur et des flammes plein les ailes. Il vole par séries de battements comme un rapace, se pose sur les titres, les cases et les boutons, s’envole quand on l’approche, et renaît de ses cendres si on clique dessus.</p>
     <div class="actions">
-      <button type="button" class="btn btn--ink" id="b-renaitre">Le faire renaître</button>
+      <button type="button" class="btn btn--ink" id="b-traverser">Traverser l’écran</button>
+      <button type="button" class="btn" id="b-centre">Au centre</button>
+      <button type="button" class="btn" id="b-renaitre">Le faire renaître</button>
       <button type="button" class="btn" id="b-pause">Pause</button>
       <button type="button" class="btn" id="b-masquer">Masquer</button>
     </div>
@@ -190,6 +192,14 @@
       <li class="tile phenix-perchoir">
         <h3>Il renaît</h3>
         <p>Un clic sur lui : il s’embrase en boule de feu, part en fumée, puis renaît d’une colonne de flammes.</p>
+      </li>
+      <li class="tile phenix-perchoir">
+        <h3>Il traverse l’écran</h3>
+        <p>Il vole jusqu’au centre, s’éloigne dans la profondeur de la page, puis fonce vers vous en grandissant et passe à travers l’écran.</p>
+      </li>
+      <li class="tile phenix-perchoir">
+        <h3>Il vire comme un oiseau</h3>
+        <p>Pour changer de direction, il freine, pivote ailes levées en prenant un peu de hauteur, puis repart de l’autre côté.</p>
       </li>
       <li class="tile phenix-perchoir">
         <h3>Il suit la page</h3>
@@ -222,10 +232,12 @@
     </div>
     <h3>Depuis JavaScript</h3>
     <ul class="api">
+      <li><code>Phenix.traverser()</code> l’envoie au centre, d’où il traverse l’écran.</li>
+      <li><code>Phenix.auCentre()</code> l’envoie voler sur place au centre de l’écran.</li>
       <li><code>Phenix.renaitre()</code> l’embrase et le fait renaître.</li>
       <li><code>Phenix.pause()</code> et <code>Phenix.reprendre()</code> figent ou relancent l’animation.</li>
       <li><code>Phenix.masquer()</code> et <code>Phenix.afficher()</code> le retirent ou le remettent sur la page.</li>
-      <li><code>Phenix.etat()</code> renvoie « posé », « en vol » ou « en cendres ».</li>
+      <li><code>Phenix.etat()</code> renvoie « posé », « en vol », « au centre », « traverse l’écran » ou « en cendres ».</li>
     </ul>
   </section>
 
@@ -246,11 +258,13 @@
     const pauseBtn = document.getElementById('b-pause');
     const hideBtn = document.getElementById('b-masquer');
     let paused = false, hidden = false;
-    document.getElementById('b-renaitre').addEventListener('click', () => {
+    const wake = () => {
       if (hidden) { P.afficher(); hidden = false; hideBtn.textContent = 'Masquer'; }
       paused = false; pauseBtn.textContent = 'Pause';
-      P.renaitre();
-    });
+    };
+    document.getElementById('b-renaitre').addEventListener('click', () => { wake(); P.renaitre(); });
+    document.getElementById('b-traverser').addEventListener('click', () => { wake(); P.traverser(); });
+    document.getElementById('b-centre').addEventListener('click', () => { wake(); P.auCentre(); });
     pauseBtn.addEventListener('click', () => {
       paused = !paused;
       if (paused) P.pause(); else P.reprendre();

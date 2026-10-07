@@ -8,8 +8,8 @@
  *   data-taille="90"            taille de l'oiseau, en pixels
  *   data-perchoirs="h1, img"    sélecteur CSS des éléments où il peut se poser
  *
- * API : Phenix.renaitre(), Phenix.pause(), Phenix.reprendre(),
- *       Phenix.masquer(), Phenix.afficher(), Phenix.etat()
+ * API : Phenix.renaitre(), Phenix.auCentre(), Phenix.traverser(), Phenix.pause(),
+ *       Phenix.reprendre(), Phenix.masquer(), Phenix.afficher(), Phenix.etat()
  */
 (() => {
   'use strict';
@@ -119,6 +119,7 @@
   const pointer = { x: -1e5, y: -1e5, moved: -1e5 };
   const bird = {
     x: -400, y: 200, vx: 0, vy: 0, bob: 0, face: 1, tilt: 0, lean: 0,
+    yaw: 1, yawTarget: 1, sq: 1, zs: 1, passT: 0, lastCenter: -99,
     phase: 0, glide: 0, gliding: false, glideT: 0, beats: 6, up: 0, tailSpread: 0.7,
     fold: 0, e: 0, breath: 0,
     blinkT: 0, nextBlink: 2, beak: 0, stretch: 0, nextStretch: 8,
@@ -268,22 +269,43 @@
     return { x: hi > lo ? lerp(lo, hi, tg.fx) : (r.left + r.right) / 2, y: r.top };
   }
   // Position des serres par rapport au centre de l'oiseau, pour une orientation donnée.
-  function footOffset(face, tilt) {
+  // fs : sens et largeur apparente (face × sq).
+  function footOffset(fs, tilt) {
     const c = Math.cos(tilt), s = Math.sin(tilt);
-    const x = FOOT[0] * face * S, y = FOOT[1] * S;
+    const x = FOOT[0] * fs * S, y = FOOT[1] * S;
     return [x * c - y * s, x * s + y * c];
   }
   function toWorld(lx, ly) {
-    const c = Math.cos(bird.tilt), s = Math.sin(bird.tilt);
-    const x = lx * bird.face * S, y = ly * S;
+    const c = Math.cos(bird.tilt), s = Math.sin(bird.tilt), k = S * bird.zs;
+    const x = lx * bird.face * bird.sq * k, y = ly * k;
     return [bird.x + x * c - y * s, bird.y + bird.bob + x * s + y * c];
   }
 
+  // Pivot : yaw va de -1 (tourné vers la gauche) à 1 (vers la droite) en passant par 0,
+  // où on le voit de face ou de dos ; sa largeur apparente se resserre puis se rouvre.
+  function turnToward(dt, rate) {
+    const d = bird.yawTarget - bird.yaw, step = rate * dt;
+    bird.yaw += Math.abs(d) < step ? d : Math.sign(d) * step;
+    if (bird.yaw > 0.001) bird.face = 1;
+    else if (bird.yaw < -0.001) bird.face = -1;
+    bird.sq = 0.2 + 0.8 * Math.abs(bird.yaw) ** 0.75;
+  }
+  function faceNow(f) {
+    bird.face = bird.yaw = bird.yawTarget = f;
+    bird.sq = 1;
+  }
+
   /* ---------- Comportement ---------- */
+  function centerTarget(pass) {
+    return { x: W / 2, y: H / 2, center: true, pass: pass === undefined ? Math.random() < 0.5 : pass };
+  }
   function pickTarget() {
     const list = bird.flyTime > 1.5 ? candidates().filter((el) => el !== bird.lastPerch) : [];
-    if (list.length && Math.random() < 0.65) {
+    const r = Math.random();
+    if (list.length && r < 0.5) {
       bird.target = { el: list[(Math.random() * list.length) | 0], fx: rand(0.1, 0.9) };
+    } else if (!reduce.matches && bird.flyTime > 1.5 && time - bird.lastCenter > 10 && r < 0.78) {
+      bird.target = centerTarget();
     } else {
       bird.target = {
         x: rand(S * 1.1, Math.max(S * 1.1, W - S * 1.1)),
@@ -320,12 +342,12 @@
     bird.gliding = false;
     if (away) {
       const dir = bird.x > pointer.x ? 1 : -1;
-      bird.face = dir;
+      bird.yawTarget = dir;
       bird.target = {
         x: clamp(bird.x + dir * rand(3, 6) * S, S * 1.1, Math.max(S * 1.1, W - S * 1.1)),
         y: clamp(bird.y - rand(1, 3) * S, S * 1.5, Math.max(S * 1.5, H - S * 1.7)),
       };
-      bird.vx = dir * 2.4 * S; bird.vy = -3 * S;
+      bird.vx = dir === bird.face ? dir * 2.4 * S : 0; bird.vy = -3 * S;
     } else {
       pickTarget();
       bird.vx = bird.face * 1.2 * S; bird.vy = -2.6 * S;
@@ -346,10 +368,19 @@
       tx = tg.x; ty = tg.y;
     }
     const dx = tx - bird.x, dy = ty - bird.y, dist = Math.hypot(dx, dy) || 1;
+    // Changement de direction : il freine, pivote (on le voit un instant de face, ailes levées),
+    // prend un peu de hauteur, puis repart dans l'autre sens.
+    if (Math.abs(dx) > 0.35 * S) bird.yawTarget = dx > 0 ? 1 : -1;
+    turnToward(dt, 2.4);
+    const turning = 1 - Math.abs(bird.yaw);
     const want = 3.6 * S * Math.min(1, dist / (tg.el ? 2.2 * S : 1.2 * S));
+    let wantX = (dx / dist) * want;
+    const wantY = (dy / dist) * want - turning * 0.9 * S;
+    if (wantX * bird.face < 0) wantX = 0; // pas de marche arrière : il se retourne d'abord
+    wantX *= Math.abs(bird.yaw);
     const k = Math.min(1, dt * 2.4);
-    bird.vx += ((dx / dist) * want - bird.vx) * k;
-    bird.vy += ((dy / dist) * want - bird.vy) * k;
+    bird.vx += (wantX - bird.vx) * k;
+    bird.vy += (wantY - bird.vy) * k;
     if (!(tg.el && dist < 2 * S)) bird.vy += Math.sin(time * 1.7) * 0.6 * S * dt;
     // Il s'écarte du curseur
     const px = bird.x - pointer.x, py = bird.y - pointer.y, pd = Math.hypot(px, py) || 1;
@@ -359,7 +390,6 @@
     }
     bird.x += bird.vx * dt;
     bird.y += bird.vy * dt;
-    if (Math.abs(bird.vx) > 0.4 * S) bird.face = bird.vx > 0 ? 1 : -1;
 
     const speed = Math.hypot(bird.vx, bird.vy);
     const climbing = bird.vy < -0.6 * S;
@@ -368,7 +398,7 @@
     // Séries de battements, puis court plané ailes tendues ; jamais en montée ni à l'atterrissage
     if (bird.gliding) {
       bird.glideT -= dt;
-      if (bird.glideT <= 0 || climbing || landing) { bird.gliding = false; bird.beats = 4 + ((Math.random() * 4) | 0); }
+      if (bird.glideT <= 0 || climbing || landing || turning > 0.1) { bird.gliding = false; bird.beats = 4 + ((Math.random() * 4) | 0); }
     }
     bird.glide += ((bird.gliding ? 1 : 0) - bird.glide) * Math.min(1, dt * 5);
     const freq = bird.flyTime < 0.6 ? 4 : landing ? 3.8 : climbing ? 3.3 : 2.7;
@@ -377,12 +407,13 @@
     bird.phase += TAU * freq * dt * (Math.cos(bird.phase) < 0 ? 1.3 : 0.8) * (1 - bird.glide);
     if (Math.floor(bird.phase / TAU) !== before) {
       bird.beats--;
-      if (bird.beats <= 0 && !climbing && !landing && speed > 1.6 * S && bird.flyTime > 1.2) {
+      if (bird.beats <= 0 && !climbing && !landing && turning < 0.05 && speed > 1.6 * S && bird.flyTime > 1.2) {
         bird.gliding = true;
         bird.glideT = rand(0.5, 1);
       }
     }
     bird.e = lerp(Math.sin(bird.phase), 0.22 + 0.04 * Math.sin(time * 3), bird.glide);
+    bird.e = lerp(bird.e, 0.72, Math.min(1, turning * 1.3)); // ailes levées pendant le pivot
     // À la remontée, l'aile se replie au poignet ; à la descente, elle s'étend en grand
     bird.up = Math.max(0, Math.cos(bird.phase)) ** 0.7 * (1 - bird.glide) * (landing ? 0.4 : 1);
     bird.tailSpread += ((landing ? 1.35 : bird.glide > 0.5 ? 0.95 : 0.6) - bird.tailSpread) * Math.min(1, dt * 4);
@@ -390,15 +421,133 @@
     const legs = landing ? clamp(1 - dist / (1.4 * S), 0, 1) * 0.9 : 0;
     bird.fold += (legs - bird.fold) * Math.min(1, dt * 6);
     // Corps presque à l'horizontale en vol rapide, redressé en montée et pour se poser ; il tangue avec le battement
-    const lean = landing ? 0.12 : clamp(1.05 * Math.min(1, Math.abs(bird.vx) / (2.8 * S)) + 0.25 * clamp(bird.vy / (2 * S), -1, 1), 0, 1.2);
+    const lean = (landing ? 0.12 : clamp(1.05 * Math.min(1, Math.abs(bird.vx) / (2.8 * S)) + 0.25 * clamp(bird.vy / (2 * S), -1, 1), 0, 1.2)) * (1 - turning);
     bird.lean += (lean - bird.lean) * Math.min(1, dt * 4);
     bird.tilt = bird.face * (bird.lean + 0.05 * Math.sin(bird.phase) * (1 - bird.glide));
     // Le corps monte à chaque coup d'aile vers le bas, et redescend à la remontée
     bird.bob = Math.sin(bird.phase) * 0.05 * S * (1 - bird.glide);
 
     if (tg.el ? dist < 0.25 * S : dist < 0.6 * S) {
-      if (tg.el) land(); else pickTarget();
+      if (tg.el) land();
+      else if (tg.center) arriveCenter(tg);
+      else pickTarget();
     }
+  }
+
+  /* ---------- Au centre de l'écran : vol sur place, ou traversée de l'écran ---------- */
+  // Vol sur place : corps redressé, ailes en V qui battent amplement, queue en éventail.
+  function hoverPose(dt) {
+    turnToward(dt, 3);
+    bird.lean += (0 - bird.lean) * Math.min(1, dt * 5);
+    bird.tilt = bird.face * bird.lean;
+    bird.glide = 0;
+    bird.gliding = false;
+    bird.phase += TAU * 3.1 * dt * (Math.cos(bird.phase) < 0 ? 1.3 : 0.8);
+    bird.e = 0.15 + 0.85 * Math.sin(bird.phase);
+    bird.up = Math.max(0, Math.cos(bird.phase)) ** 0.7 * 0.5;
+    bird.fold += (0 - bird.fold) * Math.min(1, dt * 6);
+    bird.tailSpread += (1.25 - bird.tailSpread) * Math.min(1, dt * 4);
+    bird.bob = Math.sin(bird.phase) * 0.06 * S * bird.zs;
+  }
+
+  function arriveCenter(tg) {
+    bird.lastCenter = time;
+    bird.vx = 0;
+    bird.vy = 0;
+    if (tg.pass) startPass();
+    else { bird.state = 'hover'; bird.timer = rand(1.4, 2.4); }
+  }
+
+  function updateHover(dt) {
+    hoverPose(dt);
+    bird.vx += ((W / 2 - bird.x) * 6 - bird.vx * 4) * dt;
+    bird.vy += ((H / 2 - bird.y) * 6 - bird.vy * 4) * dt;
+    bird.x += bird.vx * dt;
+    bird.y += bird.vy * dt;
+    bird.timer -= dt;
+    if (bird.timer <= 0) { bird.state = 'fly'; bird.flyTime = 2; bird.beats = 5; pickTarget(); }
+  }
+
+  // Traversée : il s'éloigne dans la profondeur de la page, puis fonce vers nous en grandissant
+  // jusqu'à passer à travers l'écran.
+  function startPass() {
+    bird.state = 'pass';
+    bird.passT = 0;
+  }
+
+  function updatePass(dt) {
+    const t = (bird.passT += dt);
+    hoverPose(dt);
+    const cx = W / 2, cy = H / 2, far = cy - 0.6 * S;
+    let ty = cy;
+    if (t < 0.6) {
+      bird.zs = 1;
+    } else if (t < 1.8) {
+      const u = (t - 0.6) / 1.2, v = u * u * (3 - 2 * u);
+      bird.zs = lerp(1, 0.3, v);
+      ty = lerp(cy, far, v);
+    } else if (t < 2.1) {
+      bird.zs = 0.3;
+      ty = far;
+    } else {
+      const u = Math.min(1, (t - 2.1) / 1.3);
+      bird.zs = 0.3 * Math.pow(9 / 0.3, u ** 1.8); // perspective : il grossit de plus en plus vite
+      ty = lerp(far, cy - 0.12 * H, u);
+      if (u >= 1) { passThrough(); return; }
+    }
+    bird.x += (cx - bird.x) * Math.min(1, dt * 4);
+    bird.y += (ty - bird.y) * Math.min(1, dt * 4);
+    bird.vx = 0;
+    bird.vy = 0;
+  }
+
+  // Il vient de passer à travers l'écran : on traverse ses flammes, puis il revient par un bord.
+  function passThrough() {
+    const cx = W / 2, cy = H / 2;
+    const n = 260 * quality;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * TAU, v = rand(3, 9) * S, r0 = rand(0, 0.6) * S;
+      spawnP(FLAME, cx + Math.cos(a) * r0, cy + Math.sin(a) * r0, Math.cos(a) * v, Math.sin(a) * v,
+        rand(0.35, 0.7), S * rand(0.25, 0.6), rand(0.8, 1), 1);
+    }
+    for (let i = 0; i < 120; i++) {
+      const a = Math.random() * TAU, v = rand(4, 10) * S;
+      spawnP(SPARK, cx, cy, Math.cos(a) * v, Math.sin(a) * v, rand(0.5, 1.1), S * rand(0.015, 0.03) + 1, 1, 1);
+    }
+    fx.push({ k: 'flash', x: cx, y: cy, r: Math.max(W, H) * 0.6, life: 0, max: 0.6 });
+    bird.state = 'away';
+    bird.timer = 0.9;
+    bird.zs = 1;
+  }
+
+  function reenter() {
+    const fromLeft = Math.random() < 0.5;
+    bird.state = 'fly';
+    bird.zs = 1;
+    faceNow(fromLeft ? 1 : -1);
+    bird.x = fromLeft ? -1.8 * S : W + 1.8 * S;
+    bird.y = rand(0.3, 0.6) * H;
+    bird.vx = bird.face * 3 * S;
+    bird.vy = 0;
+    bird.lean = 0.9;
+    bird.flyTime = 2;
+    bird.beats = 6;
+    bird.target = { x: fromLeft ? W * 0.65 : W * 0.35, y: bird.y };
+  }
+
+  // Appel depuis l'API : au centre, avec ou sans traversée.
+  function goCenter(pass) {
+    if (reduce.matches || hidden || bird.state === 'dead' || bird.state === 'pass' || bird.state === 'away') return;
+    paused = false;
+    if (bird.state === 'hover') {
+      if (pass) startPass(); else bird.timer = 2;
+      kick();
+      return;
+    }
+    if (bird.state === 'perch') takeoff(false);
+    bird.state = 'fly';
+    bird.target = centerTarget(pass);
+    kick();
   }
 
   function updatePerch(dt) {
@@ -414,8 +563,9 @@
     // Il se tourne vers le curseur
     if (time - pointer.moved < 2 && Math.abs(pointer.x - bird.x) > S && time - bird.lastFlip > 0.8) {
       const f = pointer.x > bird.x ? 1 : -1;
-      if (f !== bird.face) { bird.face = f; bird.lastFlip = time; }
+      if (f !== bird.yawTarget) { bird.yawTarget = f; bird.lastFlip = time; }
     }
+    turnToward(dt, 5);
     bird.lean += (0 - bird.lean) * Math.min(1, dt * 8);
     bird.tilt = bird.face * bird.lean;
     bird.bob = 0;
@@ -423,7 +573,7 @@
     bird.glide = 0;
     bird.tailSpread += (0.7 - bird.tailSpread) * Math.min(1, dt * 4);
     const p = perchPoint(tg);
-    const off = footOffset(bird.face, bird.tilt);
+    const off = footOffset(bird.face * bird.sq, bird.tilt);
     bird.x = p.x - off[0];
     bird.y = p.y - off[1];
 
@@ -466,11 +616,12 @@
     bird.e = 0.8;
     bird.lean = 0;
     bird.tilt = 0;
+    faceNow(bird.face);
   }
 
   // Il s'embrase : boule de feu, braises, fumée.
   function burst() {
-    if (bird.state === 'dead' || hidden || reduce.matches) return;
+    if (bird.state === 'dead' || bird.state === 'pass' || bird.state === 'away' || hidden || reduce.matches) return;
     const [cx, cy] = toWorld(0.03, -0.2);
     bird.state = 'dead';
     bird.timer = 1.25;
@@ -502,7 +653,7 @@
     bird.x = cx; bird.y = cy + 0.2 * S;
     bird.vx = 0; bird.vy = -2.6 * S;
     bird.fold = 0; bird.glide = 0; bird.gliding = false; bird.beats = 6; bird.up = 0;
-    bird.lean = 0; bird.tilt = 0; bird.phase = Math.PI / 2; bird.tailSpread = 0.9;
+    bird.lean = 0; bird.tilt = 0; bird.phase = Math.PI / 2; bird.tailSpread = 0.9; bird.zs = 1;
     bird.flyTime = 0;
     pickTarget();
     fx.push({ k: 'flash', x: cx, y: cy, r: 2.2 * S, life: 0, max: 0.45 });
@@ -513,14 +664,15 @@
   let spawnW = []; // points du plumage en coordonnées de page : [x, y, chaleur]
 
   function emit(dt) {
-    if (reduce.matches || bird.state === 'dead' || !spawnW.length) return;
-    const flying = bird.state === 'fly';
+    if (reduce.matches || bird.state === 'dead' || bird.state === 'away' || !spawnW.length) return;
+    const flying = bird.state !== 'perch';
+    const z = Math.min(bird.zs, 4); // plus loin : flammes plus petites ; plus près : plus grandes
     emitN((flying ? 1100 : 650) * quality * dt, () => {
       const p = spawnW[(Math.random() * spawnW.length) | 0];
       spawnP(FLAME,
-        p[0] + rand(-1, 1) * S * 0.015, p[1] + rand(-1, 1) * S * 0.015,
-        bird.vx * 0.12 + rand(-0.15, 0.15) * S, bird.vy * 0.12 - rand(0.1, 0.4) * S,
-        rand(0.25, 0.6), S * rand(0.07, 0.16), clamp(p[2] * rand(0.85, 1.05), 0, 1), Math.random() < 0.3 ? 1 : 0);
+        p[0] + rand(-1, 1) * S * 0.015 * z, p[1] + rand(-1, 1) * S * 0.015 * z,
+        bird.vx * 0.12 + rand(-0.15, 0.15) * S * z, bird.vy * 0.12 - rand(0.1, 0.4) * S * z,
+        rand(0.25, 0.6), S * rand(0.07, 0.16) * z, clamp(p[2] * rand(0.85, 1.05), 0, 1), Math.random() < 0.3 ? 1 : 0);
     });
     emitN((flying ? 22 : 8) * dt, () => {
       const p = spawnW[(Math.random() * spawnW.length) | 0];
@@ -550,6 +702,9 @@
     bird.beak = Math.max(0, bird.beak - dt * 2.5);
     if (bird.state === 'fly') updateFly(dt);
     else if (bird.state === 'perch') updatePerch(dt);
+    else if (bird.state === 'hover') updateHover(dt);
+    else if (bird.state === 'pass') updatePass(dt);
+    else if (bird.state === 'away') { bird.timer -= dt; if (bird.timer <= 0) reenter(); }
     else {
       bird.timer -= dt;
       if (bird.timer < 0.45 && !bird.pillar) {
@@ -1121,12 +1276,12 @@
   }
 
   function drawBird() {
-    if (bird.state === 'dead') { spawnW = []; return; }
+    if (bird.state === 'dead' || bird.state === 'away') { spawnW = []; return; }
     glowLayer();
     G = ctx;
     const shapes = buildBird();
     const breath = bird.state === 'perch' && !reduce.matches ? Math.sin(bird.breath) * 0.015 : 0;
-    const cx = bird.x, cy = bird.y + bird.bob, sz = GLOW_SPAN * S;
+    const z = bird.zs, cx = bird.x, cy = bird.y + bird.bob, sz = GLOW_SPAN * S * z;
 
     // Silhouette en basse résolution, d'une seule couleur de lumière chaude
     const gs = gcv.width, k = gs / sz;
@@ -1134,7 +1289,7 @@
     gctx.clearRect(0, 0, gs, gs);
     gctx.setTransform(k, 0, 0, k, gs / 2, gs / 2);
     gctx.rotate(bird.tilt);
-    gctx.scale(bird.face * S, S * (1 + breath));
+    gctx.scale(bird.face * bird.sq * S * z, S * z * (1 + breath));
     gctx.fillStyle = '#ff9a3c';
     fillSilhouette(gctx, shapes);
 
@@ -1150,7 +1305,7 @@
     // L'oiseau, dessiné directement
     ctx.translate(cx, cy);
     ctx.rotate(bird.tilt);
-    ctx.scale(bird.face * S, S * (1 + breath));
+    ctx.scale(bird.face * bird.sq * S * z, S * z * (1 + breath));
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     drawShapes(ctx, shapes);
@@ -1230,7 +1385,7 @@
 
   function placeHitbox() {
     let next = 'none';
-    if (bird.state !== 'dead' && !hidden && !reduce.matches) {
+    if ((bird.state === 'fly' || bird.state === 'perch' || bird.state === 'hover') && !hidden && !reduce.matches) {
       const [cx, cy] = toWorld(0.05, -0.25);
       next = `translate(${(cx - S * 0.48).toFixed(1)}px, ${(cy - S * 0.62).toFixed(1)}px)`;
     }
@@ -1318,7 +1473,7 @@
     if (first) {
       bird.perch = bird.target = { el: first, fx: 0.85 };
       const p = perchPoint(bird.perch);
-      bird.face = p.x > W / 2 ? -1 : 1;
+      faceNow(p.x > W / 2 ? -1 : 1);
       bird.state = 'perch';
       bird.fold = 1;
       bird.e = 0.8;
@@ -1330,7 +1485,7 @@
     } else if (reduce.matches) {
       relocateStill();
     } else {
-      bird.x = -1.5 * S; bird.y = H * 0.4; bird.vx = 2.5 * S; bird.face = 1;
+      bird.x = -1.5 * S; bird.y = H * 0.4; bird.vx = 2.5 * S; faceNow(1);
       pickTarget();
     }
     kick();
@@ -1342,7 +1497,9 @@
     reprendre() { paused = false; kick(); },
     masquer() { hidden = true; canvas.style.display = 'none'; hit.style.display = 'none'; hitPos = 'none'; },
     afficher() { hidden = false; canvas.style.display = ''; dirty = null; ctx.clearRect(0, 0, canvas.width, canvas.height); kick(); },
-    etat() { return bird.state === 'perch' ? 'posé' : bird.state === 'fly' ? 'en vol' : 'en cendres'; },
+    auCentre() { goCenter(false); },
+    traverser() { goCenter(true); },
+    etat() { return { perch: 'posé', fly: 'en vol', hover: 'au centre', pass: 'traverse l’écran', away: 'traverse l’écran', dead: 'en cendres' }[bird.state]; },
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

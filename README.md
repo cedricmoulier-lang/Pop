@@ -43,9 +43,11 @@ Les valeurs sont modifiables dans le tableau `CUTS` et l'objet `MEAL` en tête d
 ```
 
 - Il vole, se pose sur les titres, images, boutons et éléments marqués `data-phenix-perchoir`, et reste dessus quand la page défile.
+- Pour changer de direction, il freine, pivote ailes levées en prenant un peu de hauteur, puis repart de l'autre côté.
+- Il va parfois au centre de l'écran : il y vole sur place, ou il traverse l'écran (il s'éloigne dans la profondeur de la page, puis fonce vers le spectateur en grandissant et passe à travers l'écran avant de revenir par un bord).
 - Le curseur l'effraie ; un clic sur lui le fait s'embraser et renaître.
 - Réglages : `data-taille` (pixels) et `data-perchoirs` (sélecteur CSS) sur la balise `<script>`.
-- API : `Phenix.renaitre()`, `pause()`, `reprendre()`, `masquer()`, `afficher()`, `etat()`.
+- API : `Phenix.traverser()`, `auCentre()`, `renaitre()`, `pause()`, `reprendre()`, `masquer()`, `afficher()`, `etat()`.
 - Avec « réduire les animations », il reste posé et cligne des yeux.
 
 `phenix-manga.html` est la page de démonstration.
