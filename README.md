@@ -25,3 +25,11 @@ Ouvrez `index.html` dans un navigateur : aucune dépendance, aucun serveur néce
 Coefficients : entrée × 0,5 ; buffet × 0,6 ; appétit léger × 0,8 ; grosse faim × 1,25 ; enfant × 0,5.
 
 Les valeurs sont modifiables dans le tableau `CUTS` et l'objet `MEAL` en tête du script de `index.html`.
+
+## Phénix
+
+`phoenix.html` est une animation autonome (canvas, sans dépendance) : un phénix de flammes renaît de son nid de braises, prend son envol, puis se consume, en boucle de 20 secondes.
+
+- Le phénix suit le curseur ou le doigt ; un clic (ou la touche R) le fait renaître.
+- La frise du bas permet de sauter à une phase : cendres, embrasement, envol, combustion.
+- Espace met en pause. Avec « réduire les animations » activé, la page s'ouvre en pause.

@@ -1,0 +1,1118 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Phénix de braise</title>
+<meta name="description" content="Un phénix de flammes renaît de son nid de braises, prend son envol, puis se consume, en boucle.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@1,6..96,400..700&family=IBM+Plex+Sans+Condensed:wght@400;500;600&display=swap">
+<style>
+  /* Mise en page : ciel plein écran ; titre en haut à gauche, frise du cycle et commandes en bas. */
+  :root {
+    --night: #120a15;
+    --ink: #f6e9db;
+    --ink-soft: #cdb6a6;
+    --ink-faint: #9a7f7d;
+    --ember: #ff7a1f;
+    --gold: #ffc861;
+    --crimson: #d2353f;
+    --line: rgba(246, 233, 219, 0.16);
+    --gold-line: rgba(255, 200, 97, 0.45);
+    --gold-wash: rgba(255, 200, 97, 0.12);
+    --glass: rgba(18, 10, 21, 0.55);
+    --shadow: rgba(18, 10, 21, 0.9);
+    --font-display: "Bodoni Moda", "Bodoni 72", Didot, "Times New Roman", serif;
+    --font-ui: "IBM Plex Sans Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: var(--night);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #sky { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+  .stage {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 24px;
+    padding-block: calc(env(safe-area-inset-top, 0px) + clamp(18px, 4vh, 44px)) calc(env(safe-area-inset-bottom, 0px) + clamp(14px, 3vh, 28px));
+    padding-inline: clamp(16px, 4vw, 52px);
+    pointer-events: none;
+  }
+
+  .intro { display: grid; gap: 10px; max-width: 30rem; text-shadow: 0 1px 14px var(--shadow); }
+  .eyebrow {
+    margin: 0;
+    font-size: .72rem;
+    font-weight: 500;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--gold);
+  }
+  h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 500;
+    font-size: clamp(3rem, 8vw, 5.5rem);
+    line-height: .9;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+  }
+  .lede {
+    margin: 4px 0 0;
+    max-width: 34ch;
+    font-size: clamp(.95rem, 1.5vw, 1.06rem);
+    line-height: 1.45;
+    color: var(--ink-soft);
+  }
+  .hint { margin: 0; font-size: .8rem; line-height: 1.4; color: var(--ink-faint); }
+
+  .deck { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 24px; }
+
+  .phases {
+    flex: 1 1 24rem;
+    min-width: 0;
+    max-width: 46rem;
+    display: flex;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .phase { flex-grow: var(--w); flex-shrink: 1; flex-basis: 0; min-width: max-content; }
+  .phase button {
+    pointer-events: auto;
+    width: 100%;
+    display: grid;
+    gap: 9px;
+    padding: 10px 0 2px;
+    border: 0;
+    background: none;
+    color: var(--ink-faint);
+    font: 500 .7rem/1 var(--font-ui);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    text-align: left;
+    cursor: pointer;
+    transition: color .3s;
+  }
+  .phase button:hover { color: var(--ink-soft); }
+  .phase.is-active button { color: var(--ink); }
+  .bar { position: relative; height: 2px; border-radius: 1px; background: var(--line); overflow: hidden; }
+  .bar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, var(--crimson), var(--ember) 60%, var(--gold));
+    transform: scaleX(var(--p, 0));
+    transform-origin: left center;
+  }
+
+  .controls { display: flex; gap: 8px; margin-inline-start: auto; }
+  .btn {
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 40px;
+    padding-inline: 15px 18px;
+    border: 1px solid var(--gold-line);
+    border-radius: 999px;
+    background: var(--glass);
+    color: var(--gold);
+    font: 600 .74rem/1 var(--font-ui);
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    cursor: pointer;
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    transition: background-color .2s;
+  }
+  .btn:hover { background: var(--gold-wash); }
+  .btn span { display: inline-flex; }
+  .btn svg { width: 16px; height: 16px; fill: currentColor; }
+  .btn--icon { width: 40px; padding: 0; }
+
+  button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+  .phase button:focus-visible { outline-offset: 4px; border-radius: 2px; }
+
+  @media (max-height: 560px) {
+    .lede, .hint { display: none; }
+    h1 { font-size: 2.6rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .phase button, .btn { transition: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="sky" role="img" aria-label="Un phénix de flammes renaît de son nid de braises, prend son envol, puis se consume et retombe en cendres."></canvas>
+
+<div class="stage">
+  <header class="intro">
+    <p class="eyebrow">Ovide · Métamorphoses, livre XV</p>
+    <h1>Phénix</h1>
+    <p class="lede">Il bâtit son nid de cannelle et de myrrhe, s’y éteint, et de son corps renaît un jeune phénix.</p>
+    <p class="hint">Il suit votre curseur ou votre doigt. Un clic le fait renaître.</p>
+  </header>
+
+  <footer class="deck" id="deck">
+    <ol class="phases" aria-label="Cycle du phénix">
+      <li class="phase" style="--w: 3.5"><button type="button"><span class="bar"></span><span>Cendres</span></button></li>
+      <li class="phase" style="--w: 3.5"><button type="button"><span class="bar"></span><span>Embrasement</span></button></li>
+      <li class="phase" style="--w: 10"><button type="button"><span class="bar"></span><span>Envol</span></button></li>
+      <li class="phase" style="--w: 3"><button type="button"><span class="bar"></span><span>Combustion</span></button></li>
+    </ol>
+    <div class="controls">
+      <button type="button" class="btn" id="reborn">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.6 2.2c.9 3.2 4.9 5.6 4.9 10.6a5.5 5.5 0 0 1-11 0c0-2.6 1.3-4.6 2.7-5.8.1 1.9.9 3.2 2.1 3.8-.3-3.3.1-6 1.3-8.6Z"/></svg>
+        Renaître
+      </button>
+      <button type="button" class="btn btn--icon" id="toggle" aria-label="Mettre en pause">
+        <span id="icon-pause"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></span>
+        <span id="icon-play" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z"/></svg></span>
+      </button>
+    </div>
+  </footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ---------- Cycle (en secondes) ---------- */
+  const T_IGNITE = 3.5;  // le nid s'embrase
+  const T_FORM = 5.0;    // l'oiseau prend forme dans les flammes
+  const T_BORN = 7.0;    // renaissance, début de l'envol
+  const T_HEAT = 17.0;   // il s'échauffe
+  const T_BURST = 19.0;  // il se consume
+  const CYCLE = 20.0;
+  const PHASE_STARTS = [0, T_IGNITE, T_BORN, T_HEAT];
+  const PHASE_ENDS = [T_IGNITE, T_BORN, T_HEAT, CYCLE];
+
+  /* ---------- Palette du canvas ---------- */
+  const SKY = ['#0a0610', '#160b18', '#2a1120', '#100710'];
+  const TWIG = '#130709';
+  const RAMP = [ // température 0 → 1 : braise sombre → blanc incandescent
+    [0.00, [70, 12, 24]],
+    [0.22, [150, 26, 34]],
+    [0.42, [230, 70, 30]],
+    [0.62, [255, 128, 34]],
+    [0.80, [255, 196, 92]],
+    [1.00, [255, 246, 222]],
+  ];
+
+  const TAU = Math.PI * 2;
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+  const smooth = (k) => { k = clamp(k, 0, 1); return k * k * (3 - 2 * k); };
+  const easeOut = (k) => { k = clamp(k, 0, 1); return 1 - (1 - k) ** 3; };
+  const easeIn = (k) => { k = clamp(k, 0, 1); return k * k; };
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const rgba = (r, g, b, a) => `rgba(${r | 0},${g | 0},${b | 0},${a <= 0 ? 0 : a >= 1 ? 1 : a.toFixed(3)})`;
+  const lerp2 = (p, q, u) => [p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u];
+  const unit = (p, q) => { const dx = q[0] - p[0], dy = q[1] - p[1], d = Math.hypot(dx, dy) || 1; return [dx / d, dy / d]; };
+  const quadAt = (a, c, b, u) => {
+    const v = 1 - u;
+    return [v * v * a[0] + 2 * v * u * c[0] + u * u * b[0], v * v * a[1] + 2 * v * u * c[1] + u * u * b[1]];
+  };
+  function mulberry32(seed) {
+    return () => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let r = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /* ---------- DOM ---------- */
+  const canvas = document.getElementById('sky');
+  const ctx = canvas.getContext('2d');
+  const deck = document.getElementById('deck');
+  const phaseEls = Array.from(document.querySelectorAll('.phase'));
+  const rebornBtn = document.getElementById('reborn');
+  const toggleBtn = document.getElementById('toggle');
+  const iconPause = document.getElementById('icon-pause');
+  const iconPlay = document.getElementById('icon-play');
+  const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  /* ---------- Sprites de flamme, un par température ---------- */
+  const NS = 28;
+  const SPR = [];
+  function rampColor(k) {
+    for (let i = 1; i < RAMP.length; i++) {
+      if (k <= RAMP[i][0]) {
+        const [k0, c0] = RAMP[i - 1], [k1, c1] = RAMP[i];
+        const f = (k - k0) / (k1 - k0);
+        return [lerp(c0[0], c1[0], f), lerp(c0[1], c1[1], f), lerp(c0[2], c1[2], f)];
+      }
+    }
+    return RAMP[RAMP.length - 1][1];
+  }
+  for (let i = 0; i < NS; i++) {
+    const [r, g, b] = rampColor(i / (NS - 1));
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const x = c.getContext('2d');
+    const grd = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grd.addColorStop(0, rgba(r, g, b, 1));
+    grd.addColorStop(0.22, rgba(r, g, b, 0.7));
+    grd.addColorStop(0.55, rgba(r, g, b, 0.2));
+    grd.addColorStop(1, rgba(r, g, b, 0));
+    x.fillStyle = grd;
+    x.fillRect(0, 0, 64, 64);
+    SPR.push(c);
+  }
+
+  /* ---------- Particules (tableaux typés, retrait par permutation) ---------- */
+  const MAX = 9000;
+  const FLAME = 0, EMBER = 1, ASH = 2, CONVERGE = 3, BURST = 4;
+  const pX = new Float32Array(MAX), pY = new Float32Array(MAX);
+  const pVX = new Float32Array(MAX), pVY = new Float32Array(MAX);
+  const pLife = new Float32Array(MAX), pMax = new Float32Array(MAX);
+  const pSize = new Float32Array(MAX), pHeat = new Float32Array(MAX), pSeed = new Float32Array(MAX);
+  const pKind = new Uint8Array(MAX);
+  let count = 0;
+
+  function spawn(kind, x, y, vx, vy, life, size, heat) {
+    if (count >= MAX) return;
+    const i = count++;
+    pKind[i] = kind; pX[i] = x; pY[i] = y; pVX[i] = vx; pVY[i] = vy;
+    pLife[i] = 0; pMax[i] = life; pSize[i] = size; pHeat[i] = heat; pSeed[i] = Math.random() * TAU;
+  }
+  function moveParticle(from, to) {
+    pKind[to] = pKind[from]; pX[to] = pX[from]; pY[to] = pY[from]; pVX[to] = pVX[from]; pVY[to] = pVY[from];
+    pLife[to] = pLife[from]; pMax[to] = pMax[from]; pSize[to] = pSize[from]; pHeat[to] = pHeat[from]; pSeed[to] = pSeed[from];
+  }
+  function emitN(expected, fn) {
+    let n = expected | 0;
+    if (Math.random() < expected - n) n++;
+    for (let i = 0; i < n; i++) fn();
+  }
+
+  /* ---------- État ---------- */
+  let W = 0, H = 0, DPR = 1, S = 100;
+  let t = 0, clock = 0;
+  let running = false, rafId = 0, lastNow = 0;
+  let quality = 1, workEma = 6;
+  let skipAshes = false, bornPending = false;
+  let ashBoost = 0;
+  let flash = 0, flashX = 0, flashY = 0, flashR = 1;
+  const nest = { x: 0, y: 0, r: 1, paths: [], glow: [], widths: [] };
+  const hover = { x: 0, y: 0 };
+  const bird = { x: 0, y: 0, vx: 0, vy: 0, roll: 0, look: 1, lookTarget: 1, flap: 0, heat: 0.3 };
+  const pointer = { x: 0, y: 0, until: 0, down: null };
+  const bg = document.createElement('canvas');
+
+  const SP_MAX = 600;
+  const geo = {
+    on: false, alpha: 0, n: 0,
+    sx: new Float32Array(SP_MAX), sy: new Float32Array(SP_MAX), sh: new Float32Array(SP_MAX),
+    tips: [], eyes: [], thick: null, thin: null, membrane: null,
+    body: null, head: null, beak: null, eye: null,
+  };
+
+  /* ---------- Courbes du cycle ---------- */
+  const alive = (time) => time >= T_FORM && time < T_BURST;
+  function formAt(time) {
+    if (!alive(time)) return 0;
+    if (time < T_BORN) return smooth((time - T_FORM) / (T_BORN - T_FORM));
+    return 1;
+  }
+  const combustAt = (time) => (time >= T_HEAT && time < T_BURST ? (time - T_HEAT) / (T_BURST - T_HEAT) : 0);
+  function birdHeatAt(time) {
+    if (time < T_BORN) return lerp(1, 0.3, smooth((time - T_FORM) / (T_BORN - T_FORM)));
+    if (time < T_HEAT) return 0.3;
+    return lerp(0.3, 1, combustAt(time) ** 1.4);
+  }
+  function nestFireAt(time) { // flammes vives dans le nid, 0 → 1
+    if (time < T_IGNITE) return 0.03;
+    if (time < T_FORM) return lerp(0.03, 1, easeIn((time - T_IGNITE) / (T_FORM - T_IGNITE)));
+    if (time < T_BORN) return lerp(1, 0.08, smooth((time - T_FORM) / (T_BORN - T_FORM)));
+    if (time < T_HEAT) return 0.06;
+    if (time < T_BURST) return lerp(0.06, 0.2, combustAt(time));
+    return lerp(0.2, 0.03, (time - T_BURST) / (CYCLE - T_BURST));
+  }
+  function nestGlowAt(time) { // incandescence des braises, 0 → 1
+    if (time < T_IGNITE) return 0.28 + 0.06 * Math.sin(clock * 2.1);
+    if (time < T_FORM) return lerp(0.3, 1, smooth((time - T_IGNITE) / (T_FORM - T_IGNITE)));
+    if (time < T_BORN) return lerp(1, 0.45, smooth((time - T_FORM) / (T_BORN - T_FORM)));
+    if (time < T_HEAT) return lerp(0.45, 0.24, smooth((time - T_BORN) / 2));
+    if (time < T_BURST) return lerp(0.24, 0.55, combustAt(time));
+    return lerp(0.55, 0.3, (time - T_BURST) / (CYCLE - T_BURST));
+  }
+
+  /* ---------- Dimensions, nid, ciel ---------- */
+  function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    DPR = Math.min(window.devicePixelRatio || 1, 1.75);
+    canvas.width = Math.round(W * DPR);
+    canvas.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    S = Math.max(80, Math.min(W / 2.8, H / 2.85));
+    const deckTop = deck.getBoundingClientRect().top;
+    nest.r = 0.5 * S;
+    nest.x = W / 2;
+    nest.y = Math.min(H * 0.9, deckTop - 0.14 * S - 8);
+    hover.x = W / 2;
+    hover.y = Math.max(nest.y - 1.55 * S, 0.82 * S);
+    buildNest();
+    buildBackground();
+    if (!running) { buildBird(); render(); }
+  }
+
+  function buildNest() {
+    const rnd = mulberry32(1337);
+    const { x, y, r } = nest;
+    nest.paths = [new Path2D(), new Path2D(), new Path2D()];
+    nest.glow = [new Path2D(), new Path2D(), new Path2D(), new Path2D()];
+    nest.widths = [0.01 * S + 0.6, 0.017 * S + 0.6, 0.026 * S + 0.6];
+    const twig = (x1, y1, qx, qy, x2, y2) => {
+      const bin = (rnd() * 3) | 0;
+      nest.paths[bin].moveTo(x1, y1);
+      nest.paths[bin].quadraticCurveTo(qx, qy, x2, y2);
+      if (rnd() < 0.55) {
+        const g = nest.glow[(rnd() * 4) | 0];
+        g.moveTo(x1, y1);
+        g.quadraticCurveTo(qx, qy, x2, y2);
+      }
+    };
+    // Coupe du nid : brindilles tangentes à une demi-ellipse
+    for (let i = 0; i < 62; i++) {
+      const a = Math.PI * (0.02 + 0.96 * rnd());
+      const rr = r * (0.55 + 0.5 * rnd());
+      const cx = x + Math.cos(a) * rr;
+      const cy = y - r * 0.12 + Math.sin(a) * r * 0.3 * (0.5 + 0.6 * rnd());
+      const ang = Math.atan2(Math.cos(a) * 0.3, -Math.sin(a)) + (rnd() - 0.5) * 0.9;
+      const len = r * (0.25 + 0.45 * rnd());
+      const dx = Math.cos(ang) * len / 2, dy = Math.sin(ang) * len / 2;
+      const bend = (rnd() - 0.5) * 0.5;
+      twig(cx - dx, cy - dy, cx - dy * bend, cy + dx * bend, cx + dx, cy + dy);
+    }
+    // Rebord : longues tiges de cannelle en travers
+    for (let i = 0; i < 9; i++) {
+      const y0 = y - r * 0.14 + (rnd() - 0.5) * r * 0.14;
+      const x1 = x - r * (0.75 + 0.35 * rnd()), x2 = x + r * (0.75 + 0.35 * rnd());
+      const y1 = y0 + (rnd() - 0.5) * r * 0.12, y2 = y0 + (rnd() - 0.5) * r * 0.12;
+      twig(x1, y1, (x1 + x2) / 2, y0 + r * (0.05 + 0.12 * rnd()), x2, y2);
+    }
+  }
+
+  function buildBackground() {
+    bg.width = canvas.width;
+    bg.height = canvas.height;
+    const b = bg.getContext('2d');
+    b.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const horizon = clamp(nest.y / H, 0.6, 0.97);
+    const g = b.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, SKY[0]);
+    g.addColorStop(horizon * 0.55, SKY[1]);
+    g.addColorStop(horizon, SKY[2]);
+    g.addColorStop(1, SKY[3]);
+    b.fillStyle = g;
+    b.fillRect(0, 0, W, H);
+    // Brume rougeoyante à l'horizon
+    b.save();
+    b.translate(nest.x, nest.y);
+    b.scale(1, 0.35);
+    const haze = b.createRadialGradient(0, 0, 0, 0, 0, Math.max(W, H) * 0.7);
+    haze.addColorStop(0, 'rgba(120,30,42,0.35)');
+    haze.addColorStop(1, 'rgba(120,30,42,0)');
+    b.fillStyle = haze;
+    b.beginPath();
+    b.arc(0, 0, Math.max(W, H) * 0.7, 0, TAU);
+    b.fill();
+    b.restore();
+    // Étoiles, plus nombreuses en haut
+    const rnd = mulberry32(11);
+    const n = Math.round((W * H) / 6500);
+    for (let i = 0; i < n; i++) {
+      const sx = rnd() * W;
+      const sy = rnd() ** 1.6 * nest.y * 0.8;
+      const sr = rnd() < 0.07 ? 1.2 : 0.45 + rnd() * 0.4;
+      b.fillStyle = rgba(255, 238, 220, (0.2 + 0.55 * rnd()) * (1 - sy / nest.y));
+      b.beginPath();
+      b.arc(sx, sy, sr, 0, TAU);
+      b.fill();
+    }
+  }
+
+  /* ---------- Squelette de l'oiseau ---------- */
+  function smoothPath(path, pts) {
+    path.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length - 1; i++) {
+      path.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2);
+    }
+    const l = pts[pts.length - 1];
+    path.lineTo(l[0], l[1]);
+  }
+
+  function buildBird() {
+    const vis = formAt(t);
+    geo.on = vis > 0.002;
+    geo.n = 0;
+    geo.tips.length = 0;
+    geo.eyes.length = 0;
+    if (!geo.on) return;
+
+    const f = easeOut(vis);
+    const Sg = S * lerp(0.4, 1, f); // il grandit en prenant forme
+    const comb = combustAt(t);
+    const ph = bird.flap, sp = Math.sin(ph), cp = Math.cos(ph);
+    const elev = lerp(-1.25, 0.22, f) + (0.55 + 0.25 * comb) * f * sp;
+    const fold = Math.max(0, cp) * 0.4 * f;
+    const lag = 0.5 * cp * f;
+    const bob = 0.035 * cp * f;
+    const shake = comb * comb * 0.014 * S;
+    const ox = bird.x + (Math.random() - 0.5) * shake;
+    const oy = bird.y + (Math.random() - 0.5) * shake;
+    const cr = Math.cos(bird.roll), sr = Math.sin(bird.roll);
+    const look = bird.look;
+    const toW = (lx, ly) => [ox + (lx * cr - (ly + bob) * sr) * Sg, oy + (lx * sr + (ly + bob) * cr) * Sg];
+    const add = (p, h) => {
+      const n = geo.n;
+      if (n < SP_MAX) { geo.sx[n] = p[0]; geo.sy[n] = p[1]; geo.sh[n] = h; geo.n = n + 1; }
+    };
+    const thick = new Path2D(), thin = new Path2D(), membrane = new Path2D();
+
+    // Corps et cou
+    const spine = [[0, 0.26], [0, 0.12], [0, -0.01], [0.025 * look, -0.17], [0.06 * look, -0.285]].map((p) => toW(p[0], p[1]));
+    smoothPath(thick, spine);
+    for (let i = 0; i < spine.length - 1; i++) {
+      for (let u = 0; u < 1; u += 0.34) add(lerp2(spine[i], spine[i + 1], u), 1);
+    }
+    geo.body = { c: toW(0, 0.07), rx: 0.085 * Sg, ry: 0.2 * Sg, rot: bird.roll };
+    geo.head = { c: toW(0.06 * look, -0.285), r: 0.042 * Sg };
+    geo.beak = [toW(0.085 * look, -0.3), toW(0.17 * look, -0.264), toW(0.085 * look, -0.272)];
+    geo.eye = toW(0.073 * look, -0.293);
+
+    // Aigrette
+    for (let i = 0; i < 3; i++) {
+      const sw = Math.sin(clock * 2.3 + i * 0.8) * 0.015;
+      const b = toW(0.05 * look, -0.31);
+      const c = toW(0.05 * look - look * (0.01 + 0.01 * i), -0.4 + 0.012 * i);
+      const e = toW(0.05 * look - look * (0.075 + 0.045 * i) + sw, -0.44 + 0.035 * i);
+      thin.moveTo(b[0], b[1]);
+      thin.quadraticCurveTo(c[0], c[1], e[0], e[1]);
+      add(quadAt(b, c, e, 0.5), 0.9);
+      add(e, 0.95);
+      geo.tips.push(e);
+    }
+
+    // Ailes : épaule → coude → poignet → pointe, puis les plumes
+    for (let s = -1; s <= 1; s += 2) {
+      const root = [0.012 * s, -0.06];
+      const sh = [0.055 * s, -0.1];
+      const L1 = 0.26, L2 = 0.3 * (1 - fold * 0.45), L3 = 0.34 * (1 - fold * 0.65);
+      const a1 = elev, a2 = elev - 0.16 - 0.22 * cp * f, a3 = a2 + 0.14 - lag;
+      const el = [sh[0] + s * Math.cos(a1) * L1, sh[1] - Math.sin(a1) * L1];
+      const wr = [el[0] + s * Math.cos(a2) * L2, el[1] - Math.sin(a2) * L2];
+      const tp = [wr[0] + s * Math.cos(a3) * L3, wr[1] - Math.sin(a3) * L3];
+      const arm = [root, sh, el, wr, tp].map((p) => toW(p[0], p[1]));
+      smoothPath(thick, arm);
+      for (let i = 1; i < arm.length - 1; i++) {
+        for (let u = 0; u < 1; u += 0.25) add(lerp2(arm[i], arm[i + 1], u), 1);
+      }
+      membrane.moveTo(arm[1][0], arm[1][1]);
+      membrane.lineTo(arm[2][0], arm[2][1]);
+      membrane.lineTo(arm[3][0], arm[3][1]);
+      membrane.lineTo(arm[4][0], arm[4][1]);
+
+      const feather = (B, T, beta, L, curl, flutter, heat) => {
+        const N = s > 0 ? [-T[1], T[0]] : [T[1], -T[0]]; // normale côté bord de fuite
+        const cb = Math.cos(beta), sb = Math.sin(beta);
+        const D = [N[0] * cb + T[0] * sb, N[1] * cb + T[1] * sb];
+        const E = [B[0] + D[0] * L + N[0] * flutter, B[1] + D[1] * L + N[1] * flutter];
+        const C = [B[0] + D[0] * L * 0.5 + T[0] * L * curl, B[1] + D[1] * L * 0.5 + T[1] * L * curl];
+        const bw = toW(B[0], B[1]), cw = toW(C[0], C[1]), ew = toW(E[0], E[1]);
+        thin.moveTo(bw[0], bw[1]);
+        thin.quadraticCurveTo(cw[0], cw[1], ew[0], ew[1]);
+        add(quadAt(bw, cw, ew, 0.45), heat);
+        add(ew, heat - 0.08);
+        return ew;
+      };
+
+      // Couvertures, le long du bras
+      const Tsh = unit(sh, el);
+      for (let i = 0; i < 4; i++) {
+        const u = (i + 0.5) / 4;
+        feather(lerp2(sh, el, u), Tsh, 0.2, 0.09 + 0.03 * u, 0.15, 0, 0.82);
+      }
+      // Rémiges secondaires (avant-bras) puis primaires (main)
+      const NF = 15;
+      const tips = [];
+      const Tfore = unit(el, wr), Thand = unit(wr, tp);
+      for (let i = 0; i < NF; i++) {
+        const r = i / (NF - 1);
+        const onHand = r >= 0.42;
+        const B = onHand ? lerp2(wr, tp, (r - 0.42) / 0.58) : lerp2(el, wr, r / 0.42);
+        const beta = lerp(0.12, 1.2, r ** 1.4) + 0.28 * -cp * r * f;
+        let L = 0.15 + 0.3 * r ** 1.2;
+        if (r > 0.9) L *= 1 - (r - 0.9) * 2.2;
+        const fl = Math.sin(clock * 9 + i * 1.3 + s) * 0.012 * f;
+        tips.push(feather(B, onHand ? Thand : Tfore, beta, L, 0.14, fl, 0.92));
+      }
+      for (let i = tips.length - 1; i >= 0; i--) membrane.lineTo(tips[i][0], tips[i][1]);
+      const belly = toW(0.02 * s, 0.06);
+      membrane.lineTo(belly[0], belly[1]);
+      membrane.closePath();
+      for (let i = 9; i < tips.length; i++) geo.tips.push(tips[i]);
+    }
+
+    // Queue : sept plumes ondulantes, qui traînent derrière le mouvement
+    const trX = clamp(-bird.vx / S * 0.22, -0.45, 0.45);
+    const trY = clamp(-bird.vy / S * 0.12, -0.15, 0.25);
+    for (let j = 0; j < 7; j++) {
+      const k = j - 3, ak = Math.abs(k);
+      const len = 1.02 - ak * 0.08;
+      const pts = [];
+      for (let n = 0; n <= 12; n++) {
+        const v = n / 12;
+        const wave = Math.sin(v * 4.6 - clock * 3.1 + j * 0.9) * 0.065 * v;
+        pts.push(toW(k * 0.1 * v ** 1.25 + wave + trX * v * v, 0.26 + len * v + trY * v * v - ak * 0.05 * v * v));
+      }
+      smoothPath(thin, pts);
+      for (let n = 2; n <= 12; n += 2) add(pts[n], 0.74);
+      geo.tips.push(pts[12]);
+      if (ak <= 1) geo.eyes.push(pts[12]);
+    }
+
+    geo.thick = thick;
+    geo.thin = thin;
+    geo.membrane = membrane;
+    geo.alpha = Math.min(1, vis * 1.6);
+    geo.scale = Sg;
+  }
+
+  /* ---------- Mouvement de l'oiseau ---------- */
+  function updateBird(dt) {
+    const parkX = nest.x, parkY = nest.y - 0.55 * S;
+    if (!alive(t)) {
+      bird.x = parkX; bird.y = parkY; bird.vx = 0; bird.vy = 0; bird.roll = 0;
+    } else if (t < T_BORN) {
+      const ny = lerp(parkY, hover.y, easeOut((t - T_FORM) / (T_BORN - T_FORM)));
+      bird.vx = (parkX - bird.x) / dt;
+      bird.vy = (ny - bird.y) / dt;
+      bird.x = parkX;
+      bird.y = ny;
+    } else {
+      let tx, ty;
+      if (combustAt(t) > 0) {
+        tx = nest.x; ty = hover.y;
+      } else if (performance.now() < pointer.until) {
+        tx = clamp(pointer.x, Math.min(W / 2, S * 1.3), Math.max(W / 2, W - S * 1.3));
+        ty = clamp(pointer.y, Math.min(hover.y, 0.72 * S), Math.max(hover.y, nest.y - 1.0 * S));
+      } else {
+        const k = t - T_BORN;
+        const A = Math.max(0, Math.min(W * 0.2, W / 2 - S * 1.3));
+        tx = nest.x + A * Math.sin(k * 0.45);
+        ty = hover.y + Math.sin(k * 0.8) * 0.07 * S;
+      }
+      bird.vx += ((tx - bird.x) * 5.5 - bird.vx * 3.6) * dt;
+      bird.vy += ((ty - bird.y) * 5.5 - bird.vy * 3.6) * dt;
+      bird.x += bird.vx * dt;
+      bird.y += bird.vy * dt;
+    }
+    bird.roll += (clamp(bird.vx / S * 0.22, -0.38, 0.38) - bird.roll) * Math.min(1, dt * 4);
+    if (bird.vx > 0.12 * S) bird.lookTarget = 1;
+    else if (bird.vx < -0.12 * S) bird.lookTarget = -1;
+    bird.look += (bird.lookTarget - bird.look) * Math.min(1, dt * 3.5);
+    const comb = combustAt(t);
+    const freq = comb > 0 ? lerp(1, 2.4, comb) : 1 + Math.min(0.6, Math.hypot(bird.vx, bird.vy) / S * 0.3);
+    bird.flap = (bird.flap + TAU * freq * dt) % (TAU * 1000);
+    bird.heat = birdHeatAt(t);
+  }
+
+  /* ---------- Émission ---------- */
+  function spawnNestFlame(fire) {
+    const r = nest.r;
+    spawn(FLAME,
+      nest.x + (Math.random() + Math.random() - 1) * r * lerp(0.7, 0.45, fire),
+      nest.y - r * 0.1 + Math.random() * r * 0.06,
+      rand(-0.1, 0.1) * S,
+      -S * lerp(0.15, 1.3, fire) * rand(0.6, 1.2),
+      rand(0.45, 1) * lerp(0.8, 1.25, fire),
+      S * rand(0.03, 0.065) * lerp(0.7, 1.3, fire),
+      rand(0.65, 0.95) * lerp(0.75, 1, fire));
+  }
+  function spawnNestEmber() {
+    spawn(EMBER, nest.x + rand(-0.5, 0.5) * nest.r, nest.y - nest.r * 0.1,
+      rand(-0.08, 0.08) * S, -rand(0.1, 0.4) * S, rand(1.5, 3.5), S * rand(0.008, 0.014) + 1, rand(0.7, 1));
+  }
+  function spawnAmbientEmber() {
+    spawn(EMBER, nest.x + (Math.random() + Math.random() - 1) * W * 0.5, nest.y + rand(0, 0.2) * nest.r,
+      rand(-0.05, 0.05) * S, -rand(0.15, 0.35) * S, rand(5, 9), rand(1.2, 2.6), rand(0.55, 0.85));
+  }
+  function spawnBirdFlame() {
+    const j = (Math.random() * geo.n) | 0;
+    const h = geo.sh[j];
+    spawn(FLAME,
+      geo.sx[j] + rand(-1, 1) * S * 0.012,
+      geo.sy[j] + rand(-1, 1) * S * 0.012,
+      bird.vx * 0.3 + rand(-0.18, 0.18) * S,
+      bird.vy * 0.3 - rand(0.05, 0.35) * S,
+      rand(0.3, 0.85) * (0.8 + 0.4 * h),
+      geo.scale * rand(0.028, 0.068) * (0.7 + 0.5 * h),
+      clamp(h * rand(0.8, 1) + bird.heat * 0.25, 0, 1));
+  }
+  function spawnBirdSpark() {
+    if (!geo.tips.length) return;
+    const p = geo.tips[(Math.random() * geo.tips.length) | 0];
+    spawn(EMBER, p[0], p[1], bird.vx * 0.2 + rand(-0.4, 0.4) * S, -rand(0.2, 0.6) * S,
+      rand(1.2, 2.6), S * 0.009 + 1, 1);
+  }
+  function spawnConverge() {
+    const j = (Math.random() * geo.n) | 0;
+    const tx = geo.sx[j], ty = geo.sy[j];
+    let ox, oy;
+    if (Math.random() < 0.55) {
+      ox = nest.x + (Math.random() - 0.5) * nest.r * 1.2;
+      oy = nest.y - nest.r * 0.15;
+    } else {
+      const a = Math.random() * TAU, d = S * rand(1.1, 1.7);
+      ox = bird.x + Math.cos(a) * d;
+      oy = bird.y + Math.sin(a) * d;
+    }
+    const life = rand(0.3, 0.65);
+    spawn(CONVERGE, ox, oy, (tx - ox) / life, (ty - oy) / life, life, S * rand(0.018, 0.036), rand(0.75, 0.95));
+  }
+
+  function emit(dt) {
+    const q = quality;
+    const fire = nestFireAt(t);
+    emitN(900 * fire * q * dt, () => spawnNestFlame(fire));
+    emitN((t < T_IGNITE || t > T_BURST ? 9 : 4) * dt, spawnNestEmber);
+    emitN(4 * dt, spawnAmbientEmber);
+    if (geo.on && geo.n) {
+      emitN(2800 * geo.alpha * (1 + bird.heat * 0.6) * q * dt, spawnBirdFlame);
+      emitN(32 * q * dt, spawnBirdSpark);
+      if (t < T_BORN) emitN(300 * q * dt, spawnConverge);
+    }
+  }
+
+  function flashAt(x, y, k, r) {
+    flash = Math.max(flash, k);
+    flashX = x; flashY = y; flashR = r;
+  }
+
+  function onBorn() {
+    flashAt(bird.x, bird.y, 0.9, 2.2 * S);
+    const n = 140 * quality;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * TAU, v = S * rand(0.6, 1.6);
+      spawn(EMBER, bird.x, bird.y, Math.cos(a) * v, Math.sin(a) * v, rand(1, 2.2), S * rand(0.007, 0.014) + 0.8, 1);
+    }
+  }
+
+  function burst() {
+    if (!geo.n) return;
+    const n = 1500 * quality;
+    for (let i = 0; i < n; i++) {
+      const j = (Math.random() * geo.n) | 0;
+      const dx = geo.sx[j] - bird.x, dy = geo.sy[j] - bird.y, d = Math.hypot(dx, dy) || 1;
+      const v = S * (0.5 + 1.7 * Math.random() ** 2);
+      spawn(BURST, geo.sx[j], geo.sy[j],
+        dx / d * v + rand(-0.3, 0.3) * S, dy / d * v - 0.3 * S + rand(-0.3, 0.3) * S,
+        rand(0.7, 1.8), S * rand(0.03, 0.075), rand(0.9, 1));
+    }
+    const ash = 420 * quality;
+    for (let i = 0; i < ash; i++) {
+      const j = (Math.random() * geo.n) | 0;
+      spawn(ASH, geo.sx[j], geo.sy[j], rand(-0.4, 0.4) * S, -rand(0, 0.6) * S,
+        rand(2.5, 4.5), S * rand(0.008, 0.02) + 0.8, rand(0.55, 0.8));
+    }
+    flashAt(bird.x, bird.y, 1.3, 2.6 * S);
+  }
+
+  /* ---------- Simulation ---------- */
+  function updateParticles(dt) {
+    const rise = 1.9 * S;
+    const dragF = Math.exp(-2.2 * dt), dragE = Math.exp(-0.9 * dt), dragA = Math.exp(-1.4 * dt), dragB = Math.exp(-2.8 * dt);
+    const ashFloor = nest.y - nest.r * 0.1;
+    for (let i = 0; i < count; i++) {
+      pLife[i] += dt;
+      let dead = pLife[i] >= pMax[i];
+      if (!dead) {
+        const k = pKind[i];
+        if (k === FLAME) {
+          pVY[i] -= rise * dt;
+          pVX[i] += Math.sin(pY[i] * 0.018 + clock * 2.6 + pSeed[i]) * 0.9 * S * dt;
+          pVX[i] *= dragF; pVY[i] *= dragF;
+        } else if (k === EMBER) {
+          pVY[i] -= 0.35 * S * dt;
+          pVX[i] += Math.sin(clock * 1.7 + pSeed[i] * 3) * 0.5 * S * dt;
+          pVX[i] *= dragE; pVY[i] *= dragE;
+        } else if (k === ASH) {
+          pVY[i] += 0.8 * S * dt;
+          pVX[i] += ((nest.x - pX[i]) * 0.8 + Math.sin(clock * 2.2 + pSeed[i] * 5) * 0.3 * S) * dt;
+          pVX[i] *= dragA; pVY[i] *= dragA;
+          if (pY[i] > ashFloor && Math.abs(pX[i] - nest.x) < nest.r) {
+            dead = true;
+            ashBoost = Math.min(0.6, ashBoost + 0.003);
+          }
+        } else if (k === BURST) {
+          pVY[i] -= 1.1 * S * dt;
+          pVX[i] *= dragB; pVY[i] *= dragB;
+        }
+        pX[i] += pVX[i] * dt;
+        pY[i] += pVY[i] * dt;
+      }
+      if (dead) {
+        const last = --count;
+        if (i !== last) moveParticle(last, i);
+        i--;
+      }
+    }
+  }
+
+  function step(dt) {
+    const prev = t;
+    t += dt;
+    clock += dt;
+    if (prev < T_BORN && t >= T_BORN) bornPending = true;
+    if (prev < T_BURST && t >= T_BURST) burst();
+    if (t >= CYCLE) {
+      t -= CYCLE;
+      if (skipAshes) { t = Math.max(t, T_IGNITE - 0.8); skipAshes = false; }
+    }
+    updateBird(dt);
+    buildBird();
+    if (bornPending) { onBorn(); bornPending = false; }
+    emit(dt);
+    updateParticles(dt);
+    flash = Math.max(0, flash - dt * 1.4);
+    ashBoost *= Math.exp(-dt * 0.7);
+  }
+
+  /* ---------- Rendu ---------- */
+  function radial(x, y, r, stops) {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    for (const [o, c] of stops) g.addColorStop(o, c);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, TAU);
+    ctx.fill();
+  }
+  function ellipseGlow(x, y, r, squash, stops) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(1, squash);
+    radial(0, 0, r, stops);
+    ctx.restore();
+  }
+
+  function drawNest(heat) {
+    const { x, y, r } = nest;
+    ctx.globalCompositeOperation = 'lighter';
+    ellipseGlow(x, y + r * 0.05, r * 3.4, 0.22, [[0, rgba(170, 45, 40, 0.28 * heat)], [1, rgba(90, 20, 30, 0)]]);
+    ellipseGlow(x, y - r * 0.08, r * 1.05, 0.36, [
+      [0, rgba(255, 170, 80, 0.7 * heat)],
+      [0.35, rgba(235, 80, 35, 0.45 * heat)],
+      [1, rgba(140, 25, 25, 0)],
+    ]);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = TWIG;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 3; i++) {
+      ctx.lineWidth = nest.widths[i];
+      ctx.stroke(nest.paths[i]);
+    }
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 4; i++) {
+      const a = Math.min(1, heat * (0.4 + 0.6 * (0.5 + 0.5 * Math.sin(clock * (1.7 + i * 0.6) + i * 2.1))));
+      ctx.strokeStyle = rgba(255, 95, 35, 0.55 * a);
+      ctx.lineWidth = nest.widths[1] * 0.7;
+      ctx.stroke(nest.glow[i]);
+      ctx.strokeStyle = rgba(255, 200, 120, 0.45 * a);
+      ctx.lineWidth = Math.max(0.8, nest.widths[0] * 0.35);
+      ctx.stroke(nest.glow[i]);
+    }
+  }
+
+  function drawParticles() {
+    ctx.globalCompositeOperation = 'lighter';
+    const last = NS - 1;
+    for (let i = 0; i < count; i++) {
+      const age = pLife[i] / pMax[i];
+      const k = pKind[i];
+      let temp, size, alpha;
+      if (k === FLAME || k === BURST) {
+        const fade = 1 - age;
+        temp = pHeat[i] * fade ** 0.85;
+        size = pSize[i] * (1 - 0.5 * age);
+        alpha = 0.6 * fade * Math.sqrt(fade);
+      } else if (k === EMBER) {
+        temp = pHeat[i] * (1 - 0.45 * age);
+        size = pSize[i];
+        alpha = (1 - age) * (0.55 + 0.45 * Math.sin(clock * 9 + pSeed[i] * 7));
+      } else if (k === ASH) {
+        temp = 0.12 + pHeat[i] * 0.4 * (1 - age);
+        size = pSize[i];
+        alpha = 0.7 * Math.min(1, (1 - age) * 3);
+      } else {
+        temp = pHeat[i];
+        size = pSize[i] * (0.5 + 0.5 * age);
+        alpha = 0.25 + 0.6 * age;
+      }
+      if (alpha < 0.012 || size < 0.3) continue;
+      let si = (temp * last + 0.5) | 0;
+      if (si < 0) si = 0; else if (si > last) si = last;
+      ctx.globalAlpha = alpha > 1 ? 1 : alpha;
+      ctx.drawImage(SPR[si], pX[i] - size, pY[i] - size, size * 2, size * 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function strokePasses(path, wOuter, wMid, wCore, a, h) {
+    const sc = geo.scale;
+    ctx.strokeStyle = rgba(255, 80 + 60 * h, 30 + 50 * h, 0.12 * a);
+    ctx.lineWidth = wOuter * sc * (1 + 0.5 * h);
+    ctx.stroke(path);
+    ctx.strokeStyle = rgba(255, 150 + 60 * h, 60 + 90 * h, 0.32 * a);
+    ctx.lineWidth = wMid * sc * (1 + 0.4 * h);
+    ctx.stroke(path);
+    ctx.strokeStyle = rgba(255, 232 + 20 * h, 190 + 60 * h, 0.7 * a);
+    ctx.lineWidth = Math.max(1, wCore * sc);
+    ctx.stroke(path);
+  }
+
+  function drawBird() {
+    if (!geo.on) return;
+    const a = geo.alpha, h = bird.heat, sc = geo.scale;
+    const b = geo.body;
+    ctx.globalCompositeOperation = 'lighter';
+    // Halo
+    radial(b.c[0], b.c[1], 1.8 * sc, [
+      [0, rgba(255, 120, 45, (0.13 + 0.17 * h) * a)],
+      [0.45, rgba(190, 40, 40, 0.06 * a)],
+      [1, rgba(120, 20, 30, 0)],
+    ]);
+    // Voile des ailes
+    ctx.fillStyle = rgba(255, 105 + 70 * h, 40 + 90 * h, 0.12 * a);
+    ctx.fill(geo.membrane);
+    // Corps
+    ctx.save();
+    ctx.translate(b.c[0], b.c[1]);
+    ctx.rotate(b.rot);
+    ctx.scale(b.rx / b.ry, 1);
+    const gr = ctx.createRadialGradient(0, -b.ry * 0.25, 0, 0, 0, b.ry);
+    gr.addColorStop(0, rgba(255, 244, 215, 0.75 * a));
+    gr.addColorStop(0.4, rgba(255, 165, 70, 0.4 * a));
+    gr.addColorStop(1, rgba(255, 80, 30, 0));
+    ctx.fillStyle = gr;
+    ctx.beginPath();
+    ctx.arc(0, 0, b.ry, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+    // Traits de feu
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    strokePasses(geo.thin, 0.034, 0.014, 0.0048, a, h);
+    strokePasses(geo.thick, 0.08, 0.034, 0.012, a, h);
+    // Ocelles au bout de la queue
+    for (const e of geo.eyes) {
+      radial(e[0], e[1], 0.06 * sc, [
+        [0, rgba(255, 250, 230, 0.9 * a)],
+        [0.4, rgba(255, 120, 40, 0.3 * a)],
+        [1, rgba(200, 40, 30, 0)],
+      ]);
+    }
+    // Tête et bec
+    const hd = geo.head;
+    radial(hd.c[0], hd.c[1], hd.r * 2.4, [
+      [0, rgba(255, 240, 210, 0.9 * a)],
+      [0.45, rgba(255, 140, 50, 0.4 * a)],
+      [1, rgba(255, 80, 30, 0)],
+    ]);
+    ctx.fillStyle = rgba(255, 205, 110, 0.9 * a);
+    ctx.beginPath();
+    ctx.moveTo(geo.beak[0][0], geo.beak[0][1]);
+    ctx.lineTo(geo.beak[1][0], geo.beak[1][1]);
+    ctx.lineTo(geo.beak[2][0], geo.beak[2][1]);
+    ctx.closePath();
+    ctx.fill();
+    // Œil
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = rgba(42, 11, 14, a);
+    ctx.beginPath();
+    ctx.arc(geo.eye[0], geo.eye[1], 0.011 * sc + 0.5, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = rgba(255, 250, 240, a);
+    ctx.beginPath();
+    ctx.arc(geo.eye[0] + 0.004 * sc * bird.look, geo.eye[1] - 0.004 * sc, 0.0035 * sc + 0.3, 0, TAU);
+    ctx.fill();
+  }
+
+  function drawFlash() {
+    if (flash <= 0.01) return;
+    const f = Math.min(1, flash);
+    ctx.globalCompositeOperation = 'lighter';
+    radial(flashX, flashY, flashR * (1.4 - 0.4 * f), [
+      [0, rgba(255, 240, 210, 0.7 * f)],
+      [0.25, rgba(255, 150, 60, 0.35 * f)],
+      [1, rgba(200, 50, 40, 0)],
+    ]);
+  }
+
+  function render() {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.drawImage(bg, 0, 0, W, H);
+    drawNest(Math.min(1.25, Math.max(nestGlowAt(t), nestFireAt(t)) + ashBoost));
+    drawParticles();
+    drawBird();
+    drawFlash();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /* ---------- Frise du cycle ---------- */
+  let lastPhase = -1;
+  function phaseIndex(time) {
+    for (let i = PHASE_STARTS.length - 1; i >= 0; i--) if (time >= PHASE_STARTS[i]) return i;
+    return 0;
+  }
+  function updateUI() {
+    const idx = phaseIndex(t);
+    for (let i = 0; i < phaseEls.length; i++) {
+      const p = i < idx ? 1 : i > idx ? 0 : (t - PHASE_STARTS[i]) / (PHASE_ENDS[i] - PHASE_STARTS[i]);
+      phaseEls[i].style.setProperty('--p', p.toFixed(3));
+    }
+    if (idx !== lastPhase) {
+      phaseEls.forEach((el, i) => {
+        el.classList.toggle('is-active', i === idx);
+        const btn = el.querySelector('button');
+        if (i === idx) btn.setAttribute('aria-current', 'step');
+        else btn.removeAttribute('aria-current');
+      });
+      lastPhase = idx;
+    }
+  }
+
+  /* ---------- Boucle ---------- */
+  function frame(now) {
+    rafId = 0;
+    const raw = lastNow ? (now - lastNow) / 1000 : 1 / 60;
+    lastNow = now;
+    const t0 = performance.now();
+    step(Math.min(Math.max(raw, 0.001), 1 / 24));
+    render();
+    updateUI();
+    // Qualité adaptative : moins de particules si une image coûte trop cher
+    workEma = workEma * 0.92 + (performance.now() - t0) * 0.08;
+    if (workEma > 11) quality = Math.max(0.3, quality - 0.015);
+    else if (workEma < 6.5) quality = Math.min(1, quality + 0.004);
+    if (running) rafId = requestAnimationFrame(frame);
+  }
+
+  function setPauseUI() {
+    toggleBtn.setAttribute('aria-label', running ? 'Mettre en pause' : 'Reprendre l’animation');
+    iconPause.hidden = !running;
+    iconPlay.hidden = running;
+  }
+  function play() {
+    if (running) return;
+    running = true;
+    lastNow = 0;
+    rafId = requestAnimationFrame(frame);
+    setPauseUI();
+  }
+  function pause() {
+    running = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = 0;
+    setPauseUI();
+  }
+
+  /* ---------- Interactions ---------- */
+  function rebirth() {
+    if (alive(t)) {
+      burst();
+      t = T_BURST;
+      skipAshes = true;
+    } else if (t < T_FORM - 0.4 || t >= T_BURST) {
+      t = T_FORM - 0.4;
+      skipAshes = false;
+      flashAt(nest.x, nest.y - nest.r * 0.3, 0.7, 1.4 * S);
+    }
+    play();
+  }
+
+  function jumpTo(i) {
+    const nt = PHASE_STARTS[i];
+    const wasAlive = alive(t), willLive = alive(nt);
+    if (wasAlive && !willLive) burst();
+    t = nt;
+    skipAshes = false;
+    if (!wasAlive && willLive) {
+      bird.x = nest.x; bird.y = hover.y; bird.vx = 0; bird.vy = 0;
+      buildBird();
+      onBorn();
+    }
+    play();
+  }
+
+  function setPointer(e) {
+    pointer.x = e.clientX;
+    pointer.y = e.clientY;
+    pointer.until = e.pointerType === 'mouse' ? Infinity : performance.now() + 2500;
+  }
+  canvas.addEventListener('pointermove', setPointer);
+  canvas.addEventListener('pointerdown', (e) => {
+    setPointer(e);
+    pointer.down = { x: e.clientX, y: e.clientY, at: performance.now() };
+  });
+  canvas.addEventListener('pointerup', (e) => {
+    const d = pointer.down;
+    pointer.down = null;
+    if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 10 && performance.now() - d.at < 400) rebirth();
+  });
+  canvas.addEventListener('pointerleave', (e) => {
+    pointer.until = e.pointerType === 'mouse' ? 0 : performance.now() + 2500;
+  });
+
+  phaseEls.forEach((el, i) => el.querySelector('button').addEventListener('click', () => jumpTo(i)));
+  rebornBtn.addEventListener('click', rebirth);
+  toggleBtn.addEventListener('click', () => (running ? pause() : play()));
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'r' || e.key === 'R') { rebirth(); return; }
+    if (e.code === 'Space' && !(e.target instanceof HTMLButtonElement)) {
+      e.preventDefault();
+      if (running) pause(); else play();
+    }
+  });
+  window.addEventListener('resize', resize);
+  const onMotionChange = (e) => { if (e.matches) pause(); };
+  if (motionQuery.addEventListener) motionQuery.addEventListener('change', onMotionChange);
+
+  /* ---------- Démarrage : en plein envol, flammes déjà allumées ---------- */
+  resize();
+  t = T_BORN + 0.4;
+  bird.x = nest.x;
+  bird.y = hover.y;
+  bird.flap = 1.2;
+  for (let i = 0; i < 84; i++) step(1 / 60);
+  render();
+  updateUI();
+  setPauseUI();
+  if (!motionQuery.matches) play();
+})();
+</script>
+</body>
+</html>
