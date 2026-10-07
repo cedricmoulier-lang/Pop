@@ -585,13 +585,13 @@
       wrist.position.z = 0.31;
       const bone = (parent, len, r) => {
         const m = new THREE.Mesh(BODY_SPHERE, MAT.body);
-        m.scale.set(r * 1.7, r, len / 2);
+        m.scale.set(r * 1.4, r, len / 2);
         m.position.set(0.012, 0, len / 2);
         parent.add(m);
       };
-      bone(shoulder, 0.3, 0.038);
-      bone(elbow, 0.34, 0.03);
-      bone(wrist, 0.26, 0.022);
+      bone(shoulder, 0.3, 0.029);
+      bone(elbow, 0.34, 0.024);
+      bone(wrist, 0.26, 0.018);
       const feathers = [], tips = [];
       const add = (group, mat, L, w, x, y, z, ext, fold, bend) => {
         const m = featherMesh(mat, L, w, bend);
@@ -1319,6 +1319,9 @@
     }
 
     /* ---------- Pose du squelette ---------- */
+    // Aile repliée : rotation de l'épaule, écart au corps, hauteur de l'attache
+    // (au-delà de la verticale, le bas de l'aile rentre vers le corps : elle épouse le flanc)
+    const FOLD = { flap: -1.85, z: 0.105, y: 0.05, sweep: -1.05 };
     function applyPose() {
       bird.scale.setScalar(S);
       bird.position.copy(st.pos);
@@ -1327,12 +1330,13 @@
       torso.scale.set(1, breath, breath);
       // Ailes : battement à l'épaule, repli au coude et au poignet, éventail des plumes
       const fold = st.fold, up = st.upFold;
-      const sweep = lerp(st.sweep, -0.95, fold);
+      const sweep = lerp(st.sweep, FOLD.sweep, fold);
       const elbowA = lerp(0.55 * up, 2.45, fold);
       const wristA = lerp(-0.95 * up, -3.0, fold);
-      const flap = lerp(st.flap, -1.45, fold); // repliée, l'aile tourne à la verticale contre le flanc
+      const flap = lerp(st.flap, FOLD.flap, fold); // repliée, l'aile tourne à la verticale contre le flanc
       for (const w of wings) {
-        w.root.position.z = w.root.userData.side * lerp(0.085, 0.155, fold);
+        w.root.position.z = w.root.userData.side * lerp(0.085, FOLD.z, fold);
+        w.root.position.y = lerp(0.075, FOLD.y, fold);
         w.shoulder.rotation.set(-flap, sweep, 0);
         w.elbow.rotation.y = elbowA;
         w.wrist.rotation.y = wristA;
