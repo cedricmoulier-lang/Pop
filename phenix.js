@@ -620,7 +620,18 @@
     const wings = [buildWing(1), buildWing(-1)];
     for (const w of wings) { body.add(w.root); anchors.push(...w.tips); }
 
-    // Queue : rectrices en éventail, et trois longues plumes souples qui ondulent
+    // Queue : rectrices en éventail qui fléchissent et frémissent dans l'air (dans le shader),
+    // et trois longues plumes souples simulées (voir updatePlumes).
+    const tailU = { bend: { value: 0 }, flutter: { value: 0 }, time: { value: 0 } };
+    MAT.tail.onBeforeCompile = (sh) => {
+      sh.uniforms.uBend = tailU.bend;
+      sh.uniforms.uFlutter = tailU.flutter;
+      sh.uniforms.uTime = tailU.time;
+      sh.vertexShader = 'uniform float uBend; uniform float uFlutter; uniform float uTime; attribute float aPhase;\n' +
+        sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+          float tl = max(0.0, -position.x);
+          transformed.y += tl * tl * (uBend + uFlutter * sin(uTime * 11.0 + aPhase - tl * 7.0));`);
+    };
     const tail = new THREE.Group();
     tail.position.set(-0.25, -0.005, 0);
     body.add(tail);
@@ -629,36 +640,51 @@
       const k = (i - 5.5) / 5.5;
       const L = 0.6 + 0.2 * (1 - Math.abs(k));
       const m = featherMesh(MAT.tail, L, 0.12, -0.04);
+      m.geometry.setAttribute('aPhase', new THREE.BufferAttribute(new Float32Array(m.geometry.attributes.position.count).fill(i * 1.9), 1));
       m.position.set(0, 0.0013 * (6 - Math.abs(i - 5.5)), 0);
       tail.add(m);
-      tailFeathers.push({ m, k });
+      tailFeathers.push({ m, k, i });
       anchors.push(anchor(m, -L, 0, 0, 0.75));
       if (i % 3 === 1) flameAt(m, -L * 0.8, 0, 0, 0.8, 0.22);
     }
+    // Longues plumes : un squelette « au repos » accroché à la queue sert de cible ; une chaîne simulée
+    // (inertie, ressorts plus souples vers le bout, gravité, résistance de l'air) le suit avec du retard,
+    // et la plume est un ruban reconstruit à chaque image le long de cette chaîne.
+    const loose = new THREE.Group(); // repères placés directement dans la scène
     const plumes = [];
+    const PSEG = 8;
     for (const j of [-1, 0, 1]) {
       const segs = [];
       let parent = tail;
-      const SEG = 4, SL = 0.34 + (j ? 0 : 0.06);
-      for (let i = 0; i < SEG; i++) {
+      const SL = (0.34 + (j ? 0 : 0.06)) * 4 / PSEG;
+      for (let i = 0; i < PSEG; i++) {
         const g = new THREE.Group();
         if (i) g.position.x = -SL;
         else g.position.set(-0.05, 0.012, j * 0.03);
-        const geo = new THREE.PlaneGeometry(SL, 0.16, 3, 1);
-        geo.rotateX(-Math.PI / 2);
-        geo.translate(-SL / 2, 0, 0);
-        const uv = geo.attributes.uv;
-        for (let v = 0; v < uv.count; v++) uv.setX(v, 1 - (i + 1 - uv.getX(v)) / SEG);
-        const m = new THREE.Mesh(geo, MAT.plume);
-        m.rotation.x = 1.25 + j * 0.15; // vexille tournée vers le côté, visible de profil
-        g.add(m);
         parent.add(g);
         segs.push(g);
         parent = g;
       }
-      anchors.push(anchor(segs[SEG - 1], -SL, 0, 0, 0.7));
-      flameAt(segs[SEG - 1], -SL * 0.7, 0, 0, 0.75, 0.24);
-      plumes.push({ segs, j });
+      const tip = new THREE.Object3D();
+      tip.position.x = -SL;
+      parent.add(tip);
+      const N = PSEG + 1;
+      const geo = new THREE.BufferGeometry();
+      const uv = new Float32Array(N * 4), idx = [];
+      for (let i = 0; i < N; i++) {
+        uv.set([1 - i / PSEG, 0, 1 - i / PSEG, 1], i * 4);
+        if (i < PSEG) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+      }
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 6), 3).setUsage(THREE.DynamicDrawUsage));
+      geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      geo.setIndex(idx);
+      const mesh = new THREE.Mesh(geo, MAT.plume);
+      mesh.frustumCulled = false;
+      const tipFx = anchor(loose, 0, 0, 0, 0.7);
+      anchors.push(tipFx);
+      const flame = flameAt(loose, 0, 0, 0, 0.75, 0.24);
+      const vecs = () => Array.from({ length: N }, () => new V3());
+      plumes.push({ segs, tip, j, SL, mesh, geo, tipFx, flame, vane: 1.25 + j * 0.15, p: vecs(), v: vecs(), tgt: vecs(), prev: vecs(), ready: false });
     }
 
     // Pattes : cuisse emplumée, tarse écailleux, doigts et serres
@@ -720,6 +746,8 @@
     const scene = new THREE.Scene();
     const glowScene = new THREE.Scene();
     scene.add(bird);
+    scene.add(loose);
+    for (const p of plumes) scene.add(p.mesh);
     scene.add(new THREE.HemisphereLight(0xfff2dc, 0x6a1c12, 1.3));
     const key = new THREE.DirectionalLight(0xffffff, 2.2);
     key.position.set(-0.6, 1, 0.9);
@@ -1071,6 +1099,7 @@
       timer: 3.5, flyTime: 0, target: null, perch: null, lastPerch: null, lastCenter: -99,
       passT: 0, startle: 0, blinkT: 0, nextBlink: 2, stretch: 0, nextStretch: 6,
       headYaw: 0, headPitch: 0, beak: 0, visible: true, burstPos: new V3(), pillar: false,
+      tailSw: { x: 0, vx: 0, y: 0, vy: 0, z: 0, vz: 0 }, prevVy: 0, prevPitch: 0.8,
     };
     const fxList = [];
 
@@ -1386,8 +1415,8 @@
     // Traversée : il prend un peu de recul dans la profondeur de la page, fait demi-tour,
     // puis revient droit sur nous, ailes tendues comme un avion, et passe derrière la caméra.
     // Étapes (s) : vol sur place, recul, demi-tour, approche.
-    const P_HOVER = 0.5, P_AWAY = 1.9, P_TURN = 2.7, P_APPROACH = 1.8;
-    const farZ = () => -0.8 * D; // assez loin pour prendre de l'élan, assez près pour rester bien visible
+    const P_HOVER = 0.5, P_AWAY = 1.6, P_TURN = 2.4, P_APPROACH = 1.6;
+    const farZ = () => -0.5 * D; // juste assez de recul pour prendre de l'élan ; il reste bien visible
     function startPass() {
       st.state = 'pass';
       st.passT = 0;
@@ -1582,14 +1611,23 @@
         const ext = clamp(st.ext * (1 - fold) * (1 - 0.35 * up), 0, 1);
         for (const f of w.feathers) f.m.rotation.y = lerp(f.fold, f.ext, ext);
       }
-      // Queue en éventail, longues plumes qui ondulent
-      for (const f of tailFeathers) f.m.rotation.y = f.k * 0.32 * st.tailSpread;
-      tail.rotation.z = lerp(0.04, 0.12, st.legs) + 0.05 * Math.sin(time * 2);
-      const speed = st.vel.length() / S;
+      // Queue : l'éventail suit l'oiseau avec du retard (ressorts de tailDynamics), chaque rectrice
+      // frémit à son rythme ; les longues plumes ont ici leur forme au repos, la simulation fait le reste.
+      const speed = st.vel.length() / S, air = Math.min(1, speed / 3);
+      const sw = st.tailSw;
+      tail.rotation.set(sw.x, sw.y, lerp(0.04, 0.12, st.legs) + sw.z);
+      for (const f of tailFeathers) {
+        f.m.rotation.y = f.k * 0.32 * st.tailSpread + 0.015 * air * Math.sin(time * 4.1 + f.i * 2.3);
+        f.m.rotation.x = 0.06 * air * Math.sin(time * 6.3 + f.i * 1.7);
+      }
+      tailU.time.value = time;
+      tailU.bend.value = clamp(0.07 * sw.vz, -0.35, 0.35);
+      tailU.flutter.value = st.state === 'perch' ? 0.01 : 0.02 + 0.05 * air;
+      const droop = 0.03 + 0.05 * (1 - air);
       for (const p of plumes) {
         p.segs.forEach((g, i) => {
-          g.rotation.z = (i ? 0.16 : 0.05) * Math.sin(time * 2.6 - i * 0.9 + p.j) + (i ? 0.1 * (1 - Math.min(1, speed / 3)) : 0.05);
-          g.rotation.y = (i ? 0.08 : p.j * 0.18) * Math.sin(time * 1.9 - i * 0.7 + p.j * 2);
+          g.rotation.z = (i ? droop : 0.05) + 0.035 * Math.sin(time * 2.4 - i * 0.7 + p.j);
+          g.rotation.y = (i ? 0.02 * p.j : p.j * 0.18) + 0.03 * Math.sin(time * 1.7 - i * 0.6 + p.j * 2);
         });
       }
       // Pattes : repliées en vol, tendues verticalement une fois posé
@@ -1606,6 +1644,90 @@
       for (const e of eyes) e.scale.set(1, blink, 1);
       for (const c of crest) c.m.rotation.z = c.base + 0.07 * Math.sin(time * 3 + c.k * 2) + Math.min(0.12, speed * 0.04);
       bird.updateMatrixWorld(true);
+    }
+
+    /* ---------- Queue : mouvements secondaires ---------- */
+    // L'éventail est monté sur des ressorts peu amortis : il bat à contretemps des ailes,
+    // traîne quand l'oiseau monte ou se cabre, et se tord dans les virages.
+    function tailDynamics(dt) {
+      const sw = st.tailSw;
+      if (dt <= 0) return;
+      const flying = st.state !== 'perch' && st.state !== 'dead';
+      const beat = flying ? (1 - st.glide) * st.ext : 0;
+      const ay = (st.vel.y - st.prevVy) / dt, pr = (st.pitch - st.prevPitch) / dt;
+      st.prevVy = st.vel.y;
+      st.prevPitch = st.pitch;
+      const tz = -0.11 * beat * Math.sin(st.phase) + clamp(ay / (20 * S), -0.3, 0.3) - clamp(0.12 * pr, -0.3, 0.3)
+        + (flying ? 0 : 0.03 * Math.sin(time * 1.3));
+      const tx = clamp(-0.15 * st.yawRate, -0.35, 0.35) + 0.04 * beat * Math.sin(st.phase * 0.5);
+      const ty = clamp(0.12 * st.yawRate, -0.3, 0.3);
+      const k = 55, c = 2 * 0.28 * Math.sqrt(k);
+      for (const [a, va, t] of [['x', 'vx', tx], ['y', 'vy', ty], ['z', 'vz', tz]]) {
+        sw[va] += (k * (t - sw[a]) - c * sw[va]) * dt;
+        sw[a] = clamp(sw[a] + sw[va] * dt, -0.7, 0.7);
+      }
+    }
+
+    const tmpQ = new THREE.Quaternion(), tmpA = new V3(), tmpB = new V3(), tmpW = new V3();
+    function updatePlumes(dt) {
+      const N = PSEG + 1, g = 2.2 * S;
+      for (const pl of plumes) {
+        const L = pl.SL * S;
+        for (let i = 0; i < N; i++) {
+          pl.prev[i].copy(pl.tgt[i]);
+          (i < PSEG ? pl.segs[i] : pl.tip).getWorldPosition(pl.tgt[i]);
+        }
+        // Premier passage, téléportation ou animations réduites : la plume prend sa forme au repos
+        if (!pl.ready || reduce.matches || pl.tgt[0].distanceTo(pl.prev[0]) > 3 * S) {
+          for (let i = 0; i < N; i++) { pl.p[i].copy(pl.tgt[i]); pl.v[i].set(0, 0, 0); }
+          pl.ready = true;
+        } else if (dt > 0) {
+          const n = Math.ceil(dt * 60 - 1e-6), h = dt / n;
+          for (let s = 1; s <= n; s++) {
+            const f = s / n;
+            pl.p[0].lerpVectors(pl.prev[0], pl.tgt[0], f);
+            for (let i = 1; i < N; i++) {
+              // raide près de la queue, de plus en plus souple vers le bout ; amortie par rapport à l'oiseau
+              const k = lerp(140, 16, (i - 1) / (N - 2)), c = 2 * 0.22 * Math.sqrt(k);
+              tmpA.lerpVectors(pl.prev[i], pl.tgt[i], f);
+              tmpB.subVectors(pl.tgt[i], pl.prev[i]).divideScalar(dt);
+              const v = pl.v[i], p = pl.p[i];
+              v.x += (k * (tmpA.x - p.x) - c * (v.x - tmpB.x) - 0.7 * v.x) * h;
+              v.y += (k * (tmpA.y - p.y) - c * (v.y - tmpB.y) - 0.7 * v.y - g) * h;
+              v.z += (k * (tmpA.z - p.z) - c * (v.z - tmpB.z) - 0.7 * v.z) * h;
+              p.addScaledVector(v, h);
+            }
+            // Elle se courbe sans faire d'angle vif, et ne s'étire pas : chaque maillon garde sa longueur
+            for (let i = 1; i < N - 1; i++) {
+              tmpW.addVectors(pl.p[i - 1], pl.p[i + 1]).multiplyScalar(0.5).sub(pl.p[i]).multiplyScalar(0.25);
+              pl.p[i].add(tmpW);
+            }
+            for (let i = 1; i < N; i++) {
+              tmpW.subVectors(pl.p[i], pl.p[i - 1]);
+              const d = tmpW.length() || 1;
+              tmpW.multiplyScalar(L / d - 1);
+              pl.p[i].add(tmpW);
+              pl.v[i].addScaledVector(tmpW, 0.9 / h);
+            }
+          }
+        }
+        // Ruban : la largeur part du plan de la vexille à la base, puis suit la plume de proche en proche
+        // (transport parallèle), pour qu'elle ne vrille pas quand la plume pend à la verticale
+        const arr = pl.geo.attributes.position.array, hw = 0.08 * S;
+        pl.segs[0].getWorldQuaternion(tmpQ);
+        tmpW.set(0, -Math.sin(pl.vane), Math.cos(pl.vane)).applyQuaternion(tmpQ);
+        for (let i = 0; i < N; i++) {
+          tmpA.subVectors(pl.p[Math.min(N - 1, i + 1)], pl.p[Math.max(0, i - 1)]).normalize();
+          tmpW.addScaledVector(tmpA, -tmpW.dot(tmpA)).normalize();
+          const p = pl.p[i];
+          arr[i * 6] = p.x - tmpW.x * hw; arr[i * 6 + 1] = p.y - tmpW.y * hw; arr[i * 6 + 2] = p.z - tmpW.z * hw;
+          arr[i * 6 + 3] = p.x + tmpW.x * hw; arr[i * 6 + 4] = p.y + tmpW.y * hw; arr[i * 6 + 5] = p.z + tmpW.z * hw;
+        }
+        pl.geo.attributes.position.needsUpdate = true;
+        pl.geo.computeVertexNormals();
+        pl.tipFx.position.copy(pl.p[N - 1]);
+        pl.flame.position.lerpVectors(pl.p[N - 2], pl.p[N - 1], 0.4);
+      }
     }
 
     /* ---------- Boucle ---------- */
@@ -1648,7 +1770,9 @@
         if (st.timer < 0.45 && !st.pillar) { st.pillar = true; fxList.push({ k: 'column', life: 0, max: 0.6 }); }
         if (st.timer <= 0) reborn();
       }
+      tailDynamics(dt);
       applyPose();
+      updatePlumes(dt);
       emit(dt);
       for (let i = fxList.length - 1; i >= 0; i--) {
         const f = fxList[i];
@@ -1738,6 +1862,7 @@
 
     function render() {
       bird.visible = st.visible;
+      for (const p of plumes) p.mesh.visible = st.visible;
       centerMark.getWorldPosition(tmpV);
       glow.position.copy(tmpV);
       glow.material.opacity = st.visible ? 0.24 + 0.04 * Math.sin(time * 9) : 0;
@@ -1871,6 +1996,7 @@
       pickTarget();
     }
     applyPose();
+    updatePlumes(0);
     render();
     kick();
 
