@@ -1383,9 +1383,11 @@
       }
     }
 
-    // Traversée : il s'enfonce dans la profondeur de la page, fait demi-tour au loin,
+    // Traversée : il prend un peu de recul dans la profondeur de la page, fait demi-tour,
     // puis revient droit sur nous, ailes tendues comme un avion, et passe derrière la caméra.
-    const FAR = -3600;
+    // Étapes (s) : vol sur place, recul, demi-tour, approche.
+    const P_HOVER = 0.5, P_AWAY = 1.9, P_TURN = 2.7, P_APPROACH = 1.8;
+    const farZ = () => -0.8 * D; // assez loin pour prendre de l'élan, assez près pour rester bien visible
     function startPass() {
       st.state = 'pass';
       st.passT = 0;
@@ -1393,14 +1395,15 @@
     }
     function updatePass(dt) {
       const t = (st.passT += dt);
-      if (t < 0.6) {
+      const FAR = farZ();
+      if (t < P_HOVER) {
         hoverPose(dt, -Math.PI / 2);
         st.pos.lerp(new V3(0, 0, 0), Math.min(1, dt * 4));
-      } else if (t < 2.8) {
+      } else if (t < P_AWAY) {
         // Il nous tourne le dos et s'éloigne en battant des ailes
         st.yawTarget = Math.PI / 2;
         if (st.yaw < -Math.PI / 2 - 0.01) st.yaw += TAU;
-        turn(dt, 2.8);
+        turn(dt, 3.4);
         flapStep(dt, 3);
         const s = Math.sin(st.phase), c = Math.cos(st.phase);
         st.flap = lerp(-0.7, 0.95, (s + 1) / 2);
@@ -1411,12 +1414,12 @@
         st.tailSpread = ease(st.tailSpread, 0.7, dt, 4);
         st.pitch = ease(st.pitch, 0.1, dt, 3);
         st.roll = ease(st.roll, 0, dt, 4);
-        const u = smooth((t - 0.6) / 2.2);
+        const u = smooth((t - P_HOVER) / (P_AWAY - P_HOVER));
         st.pos.set(0, lerp(0, 0.6 * S, u), lerp(0, FAR, u));
-      } else if (t < 3.9) {
-        // Demi-tour au loin, incliné
+      } else if (t < P_TURN) {
+        // Demi-tour, incliné
         st.yawTarget = 1.5 * Math.PI;
-        turn(dt, 3);
+        turn(dt, 4);
         flapStep(dt, 3);
         st.flap = lerp(-0.4, 0.8, (Math.sin(st.phase) + 1) / 2);
         st.upFold = 0;
@@ -1424,7 +1427,7 @@
         st.pitch = ease(st.pitch, 0.05, dt, 3);
       } else {
         // Comme un avion : ailes tendues à plat, sans battre, il plane droit sur la caméra
-        const u = (t - 3.9) / 2.4;
+        const u = (t - P_TURN) / P_APPROACH;
         fireBoost = 1 + 1.2 * u; // le feu enfle à mesure qu'il approche
         preHeat = clamp((u - 0.5) / 0.5, 0, 1); // la chaleur gagne les bords de l'écran
         shake = Math.max(shake, 5 * clamp((u - 0.8) / 0.2, 0, 1));
