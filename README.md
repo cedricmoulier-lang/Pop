@@ -33,3 +33,19 @@ Les valeurs sont modifiables dans le tableau `CUTS` et l'objet `MEAL` en tête d
 - Le phénix suit le curseur ou le doigt ; un clic (ou la touche R) le fait renaître.
 - La frise du bas permet de sauter à une phase : cendres, embrasement, envol, combustion.
 - Espace met en pause. Avec « réduire les animations » activé, la page s'ouvre en pause.
+
+## Phénix manga
+
+`phenix-manga.js` est une mascotte autonome (sans dépendance) : un phénix dessiné à l'encre, façon manga, qui se promène sur n'importe quelle page HTML. Ajoutez avant `</body>` :
+
+```html
+<script src="phenix-manga.js" defer></script>
+```
+
+- Il vole, se pose sur les titres, images, boutons et éléments marqués `data-phenix-perchoir`, et reste dessus quand la page défile.
+- Le curseur l'effraie ; un clic sur lui le fait s'embraser et renaître.
+- Réglages : `data-taille` (pixels) et `data-perchoirs` (sélecteur CSS) sur la balise `<script>`.
+- API : `Phenix.renaitre()`, `pause()`, `reprendre()`, `masquer()`, `afficher()`, `etat()`.
+- Avec « réduire les animations », il reste posé et cligne des yeux.
+
+`phenix-manga.html` est la page de démonstration.

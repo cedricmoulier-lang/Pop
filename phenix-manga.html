@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Phénix de braise</title>
+<meta name="description" content="Un phénix façon manga qui se promène sur une page HTML : il vole, se pose sur les titres, s'effraie au curseur et renaît de ses cendres.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Mise en page : une planche de manga en une colonne ; titre sur lignes de concentration, puis cases encrées. */
+  :root {
+    --paper: #faf7f0;
+    --panel: #ffffff;
+    --ink: #17111a;
+    --ink-soft: #4d434b;
+    --tone: rgba(23, 17, 26, 0.16);
+    --tone-soft: rgba(23, 17, 26, 0.08);
+    --fire: #d92e22;
+    --fire-wash: #ffe4c7;
+    --font-display: "Dela Gothic One", "Arial Black", "Hiragino Sans", sans-serif;
+    --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #141015;
+      --panel: #1c171d;
+      --ink: #f3ece3;
+      --ink-soft: #c2b6bc;
+      --tone: rgba(243, 236, 227, 0.13);
+      --tone-soft: rgba(243, 236, 227, 0.07);
+      --fire: #ff6445;
+      --fire-wash: #3a1b1b;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #141015;
+    --panel: #1c171d;
+    --ink: #f3ece3;
+    --ink-soft: #c2b6bc;
+    --tone: rgba(243, 236, 227, 0.13);
+    --tone-soft: rgba(243, 236, 227, 0.07);
+    --fire: #ff6445;
+    --fire-wash: #3a1b1b;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { font-size: 16px; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    line-height: 1.6;
+  }
+  .page {
+    max-width: 62rem;
+    margin-inline: auto;
+    padding-inline: clamp(16px, 4vw, 40px);
+    padding-block: 0 4rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: clamp(3rem, 7vw, 4.5rem);
+  }
+  h1, h2, h3 { font-family: var(--font-display); font-weight: 400; margin: 0; text-wrap: balance; line-height: 1.15; }
+  p { margin: 0; }
+  code { font-family: var(--font-mono); font-size: .88em; }
+
+  /* Titre sur fond de lignes de concentration */
+  .hero {
+    position: relative;
+    display: grid;
+    gap: 1.1rem;
+    padding-block: clamp(150px, 24vh, 220px) 2.5rem;
+    isolation: isolate;
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: 0 calc(-1 * clamp(16px, 4vw, 40px));
+    z-index: -1;
+    background: repeating-conic-gradient(from 3deg at 46% 30%, var(--tone-soft) 0deg 1.3deg, transparent 1.3deg 5deg);
+    -webkit-mask-image: radial-gradient(ellipse 75% 70% at 46% 30%, transparent 0 28%, #000 80%);
+    mask-image: radial-gradient(ellipse 75% 70% at 46% 30%, transparent 0 28%, #000 80%);
+  }
+  .eyebrow {
+    font-weight: 700;
+    font-size: .78rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--fire);
+  }
+  h1 {
+    display: flex;
+    align-items: flex-start;
+    gap: .2em;
+    font-size: clamp(3.4rem, 12vw, 7.5rem);
+    line-height: .95;
+    letter-spacing: -0.01em;
+  }
+  .kanji {
+    writing-mode: vertical-rl;
+    font-size: .32em;
+    line-height: 1;
+    letter-spacing: .08em;
+    color: var(--fire);
+    padding-top: .25em;
+  }
+  .lede { max-width: 38rem; font-size: clamp(1.05rem, 2vw, 1.2rem); }
+  .credit { font-size: .9rem; color: var(--ink-soft); }
+  .actions { display: flex; flex-wrap: wrap; gap: .6rem; padding-top: .4rem; }
+
+  .btn {
+    min-height: 44px;
+    padding: .55rem 1.1rem;
+    border: 3px solid var(--ink);
+    border-radius: 0;
+    background: var(--panel);
+    color: var(--ink);
+    font: 700 .95rem/1.2 var(--font-body);
+    cursor: pointer;
+  }
+  .btn:hover { background: var(--fire-wash); }
+  .btn--ink { background: var(--ink); color: var(--paper); }
+  .btn--ink:hover { background: var(--fire); border-color: var(--fire); color: #fff; }
+  .btn:focus-visible { outline: 3px solid var(--fire); outline-offset: 3px; }
+
+  section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.1rem; }
+  h2 { font-size: clamp(1.7rem, 4.2vw, 2.4rem); }
+  section > p { max-width: 40rem; }
+
+  /* Cases de manga */
+  .strip {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));
+    gap: 12px;
+  }
+  .koma {
+    position: relative;
+    display: grid;
+    align-content: end;
+    gap: .5rem;
+    min-height: 15rem;
+    min-width: 0;
+    padding: 1.1rem 1.1rem 1.2rem;
+    border: 3px solid var(--ink);
+    background: var(--panel);
+    overflow: hidden;
+  }
+  .koma:nth-child(2), .koma:nth-child(3) {
+    background-image: radial-gradient(var(--tone) 1.2px, transparent 1.5px);
+    background-size: 7px 7px;
+  }
+  .koma h3 { font-size: 1.25rem; }
+  .koma p { font-size: .95rem; color: var(--ink-soft); }
+  .sfx {
+    position: absolute;
+    top: .4rem;
+    right: .6rem;
+    font-family: var(--font-display);
+    font-size: 2.9rem;
+    line-height: 1;
+    color: var(--panel);
+    -webkit-text-stroke: 3px var(--ink);
+    paint-order: stroke fill;
+    transform: rotate(-9deg);
+    pointer-events: none;
+  }
+  .koma:nth-child(3) .sfx { color: var(--fire); }
+
+  .snippet {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    border: 3px solid var(--ink);
+    background: var(--panel);
+  }
+  .snippet pre {
+    flex: 1 1 20rem;
+    min-width: 0;
+    margin: 0;
+    padding: 1rem 1.1rem;
+    overflow-x: auto;
+    font: 500 .95rem/1.5 var(--font-mono);
+  }
+  .snippet .btn { border-width: 0 0 0 3px; }
+  .status { min-height: 1.5em; font-size: .9rem; color: var(--ink-soft); }
+
+  .table-wrap { overflow-x: auto; border: 3px solid var(--ink); background: var(--panel); }
+  table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+  th, td { padding: .7rem .9rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--tone); }
+  th { font-family: var(--font-display); font-weight: 400; font-size: .9rem; letter-spacing: .02em; }
+  tr:last-child td { border-bottom: 0; }
+  td:first-child { white-space: nowrap; }
+
+  .api { margin: 0; padding: 0; list-style: none; display: grid; gap: .45rem; }
+  .api code { font-weight: 500; }
+
+  footer { padding-top: 1.5rem; border-top: 3px solid var(--ink); font-size: .9rem; color: var(--ink-soft); }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <p class="eyebrow">Mascotte pour page HTML · sans dépendance</p>
+    <h1>Phénix <span class="kanji" lang="ja">火の鳥</span></h1>
+    <p class="lede">Un oiseau de feu dessiné à l’encre qui se promène sur votre page. Il vole d’un titre à l’autre, se pose sur les cases et les boutons, s’envole quand on l’approche, et renaît de ses cendres si on clique dessus.</p>
+    <p class="credit">Clin d’œil au <i>Hi no Tori</i>, l’oiseau de feu d’Osamu Tezuka.</p>
+    <div class="actions">
+      <button type="button" class="btn btn--ink" id="b-renaitre">Le faire renaître</button>
+      <button type="button" class="btn" id="b-pause">Pause</button>
+      <button type="button" class="btn" id="b-masquer">Masquer</button>
+    </div>
+  </header>
+
+  <section aria-labelledby="t-fait">
+    <h2 id="t-fait">Ce qu’il fait</h2>
+    <ol class="strip">
+      <li class="koma phenix-perchoir">
+        <span class="sfx" lang="ja" aria-hidden="true">スッ</span>
+        <h3>Il se pose</h3>
+        <p>Sur les titres, les images, les boutons, ou tout élément marqué <code>data-phenix-perchoir</code>.</p>
+      </li>
+      <li class="koma phenix-perchoir">
+        <span class="sfx" lang="ja" aria-hidden="true">ビクッ</span>
+        <h3>Il s’effraie</h3>
+        <p>Approchez le curseur : un point d’exclamation, et il file ailleurs.</p>
+      </li>
+      <li class="koma phenix-perchoir">
+        <span class="sfx" lang="ja" aria-hidden="true">ボワッ</span>
+        <h3>Il renaît</h3>
+        <p>Un clic sur lui : il s’embrase, part en fumée, puis renaît d’une colonne de flammes.</p>
+      </li>
+      <li class="koma phenix-perchoir">
+        <span class="sfx" lang="ja" aria-hidden="true">キラッ</span>
+        <h3>Il suit la page</h3>
+        <p>Posé, il reste sur son élément quand vous faites défiler. Si l’élément sort de l’écran, il reprend son vol.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="t-installer">
+    <h2 id="t-installer">L’installer</h2>
+    <p>Placez <code>phenix-manga.js</code> à côté de votre page, puis ajoutez cette ligne juste avant <code>&lt;/body&gt;</code>. Aucune autre dépendance.</p>
+    <div class="snippet">
+      <pre><code id="code">&lt;script src="phenix-manga.js" defer&gt;&lt;/script&gt;</code></pre>
+      <button type="button" class="btn" id="b-copier">Copier</button>
+    </div>
+    <p class="status" id="copie" role="status"></p>
+  </section>
+
+  <section aria-labelledby="t-reglages">
+    <h2 id="t-reglages">Réglages</h2>
+    <p>Sur la balise <code>&lt;script&gt;</code>, deux attributs facultatifs :</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Attribut</th><th scope="col">Effet</th><th scope="col">Par défaut</th></tr></thead>
+        <tbody>
+          <tr><td><code>data-taille</code></td><td>Taille de l’oiseau, en pixels (le corps et le cou ; ailes et queue en plus).</td><td>8,5 % du plus petit côté de l’écran, entre 42 et 80</td></tr>
+          <tr><td><code>data-perchoirs</code></td><td>Sélecteur CSS des éléments où il peut se poser.</td><td><code>h1, h2, h3, img, button, [data-phenix-perchoir], .phenix-perchoir</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>Depuis JavaScript</h3>
+    <ul class="api">
+      <li><code>Phenix.renaitre()</code> l’embrase et le fait renaître.</li>
+      <li><code>Phenix.pause()</code> et <code>Phenix.reprendre()</code> figent ou relancent l’animation.</li>
+      <li><code>Phenix.masquer()</code> et <code>Phenix.afficher()</code> le retirent ou le remettent sur la page.</li>
+      <li><code>Phenix.etat()</code> renvoie « posé », « en vol » ou « en cendres ».</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="t-discret">
+    <h2 id="t-discret">Il ne gêne pas la page</h2>
+    <p>Il vole par-dessus le contenu sans le bloquer : seuls les clics sur l’oiseau lui-même sont interceptés. Un liseré clair autour du trait le garde lisible sur les fonds clairs comme sombres. Si l’option « réduire les animations » est activée sur l’appareil, il reste posé et se contente de cligner des yeux.</p>
+  </section>
+
+  <footer>
+    <p>Phénix manga · un seul fichier, <code>phenix-manga.js</code>, dessiné en direct sur un canvas.</p>
+  </footer>
+</main>
+
+<script src="phenix-manga.js" defer></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const P = window.Phenix;
+    const pauseBtn = document.getElementById('b-pause');
+    const hideBtn = document.getElementById('b-masquer');
+    let paused = false, hidden = false;
+    document.getElementById('b-renaitre').addEventListener('click', () => {
+      if (hidden) { P.afficher(); hidden = false; hideBtn.textContent = 'Masquer'; }
+      paused = false; pauseBtn.textContent = 'Pause';
+      P.renaitre();
+    });
+    pauseBtn.addEventListener('click', () => {
+      paused = !paused;
+      if (paused) P.pause(); else P.reprendre();
+      pauseBtn.textContent = paused ? 'Reprendre' : 'Pause';
+    });
+    hideBtn.addEventListener('click', () => {
+      hidden = !hidden;
+      if (hidden) P.masquer(); else P.afficher();
+      hideBtn.textContent = hidden ? 'Afficher' : 'Masquer';
+    });
+    const status = document.getElementById('copie');
+    document.getElementById('b-copier').addEventListener('click', () => {
+      const text = document.getElementById('code').textContent;
+      const select = () => {
+        const range = document.createRange();
+        range.selectNodeContents(document.getElementById('code'));
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        status.textContent = 'Ligne sélectionnée : copiez-la avec Ctrl+C (ou ⌘C).';
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => { status.textContent = 'Copié dans le presse-papiers.'; }, select);
+      } else {
+        select();
+      }
+    });
+  });
+</script>
+</body>
+</html>
