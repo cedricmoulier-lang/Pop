@@ -417,7 +417,7 @@
     const body = new THREE.Group();
     bird.add(body);
 
-    // Tronc et cou d'un seul tenant : poitrail profond, croupion effilé, cou continu
+    // Tronc et cou d'un seul tenant : poitrail profond, croupion effilé, cou court et épais
     const torso = new THREE.Mesh(loftGeo([
       [-0.36, 0.012, 0.03, 0.045],
       [-0.27, 0.004, 0.072, 0.085],
@@ -425,29 +425,64 @@
       [-0.01, -0.02, 0.155, 0.145],
       [0.1, -0.028, 0.162, 0.14],
       [0.19, -0.004, 0.138, 0.122],
-      [0.26, 0.045, 0.098, 0.092],
-      [0.32, 0.098, 0.077, 0.073],
-      [0.37, 0.138, 0.067, 0.064],
-      [0.41, 0.162, 0.06, 0.057],
-    ], 56, 32), MAT.body);
+      [0.25, 0.04, 0.112, 0.102],
+      [0.3, 0.078, 0.094, 0.087],
+      [0.34, 0.105, 0.082, 0.077],
+    ], 52, 32), MAT.body);
     body.add(torso);
-    // Camail : plumes pointues sur la nuque et les côtés du cou
-    for (let i = 0; i < 12; i++) {
-      const u = i / 11, side = i % 2 ? 1 : -1;
-      const m = featherMesh(MAT.covert, 0.13 - 0.03 * u, 0.06, 0.15);
-      m.position.set(lerp(0.36, 0.2, u), lerp(0.16, 0.1, u), side * lerp(0.035, 0.07, u));
-      m.rotation.set(side * 0.5, side * 0.35, 0.35);
-      body.add(m);
+    // Camail : rangs de plumes pointues couchées sur le cou, qui retombent vers les épaules
+    for (const [x, y, r, L] of [[0.22, 0.03, 0.125, 0.16], [0.27, 0.06, 0.106, 0.14], [0.31, 0.088, 0.09, 0.12]]) {
+      for (const a of [-1.75, -1.15, -0.55, 0, 0.55, 1.15, 1.75]) {
+        const m = featherMesh(MAT.covert, L, 0.075, 0.12);
+        m.position.set(x + 0.02, y + Math.cos(a) * r * 0.92, Math.sin(a) * r * 0.92);
+        m.rotation.set(a, 0, 0.18);
+        body.add(m);
+      }
     }
-    anchors.push(anchor(body, 0.05, 0.15, 0, 1), anchor(body, -0.12, 0.12, 0, 1), anchor(body, 0.15, -0.12, 0, 0.9));
+    anchors.push(anchor(body, -0.05, 0.13, 0, 1), anchor(body, -0.2, 0.08, 0, 1), anchor(body, 0.15, -0.12, 0, 0.9));
 
-    // Tête
+    // Tête de rapace : crâne allongé et plat, joues pleines, arcades saillantes, gros bec crochu
+    const headTex = canvasTex(256, 256, (g, W, H) => {
+      const grad = g.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, '#a8241c');
+      grad.addColorStop(0.3, '#e0501c');
+      grad.addColorStop(0.55, '#ff9a2c');
+      grad.addColorStop(0.8, '#ffcf72');
+      grad.addColorStop(1, '#ffe6a6');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, W, H);
+      // petites plumes fines, plus serrées que sur le corps
+      for (let r = 0; r < 22; r++) {
+        for (let c = -1; c <= 22; c++) {
+          const x = (c + (r % 2) * 0.5) * (W / 22), y = r * (H / 22), w = W / 22;
+          g.beginPath();
+          g.moveTo(x - w * 0.5, y);
+          g.quadraticCurveTo(x, y + w * 1.6, x + w * 0.5, y);
+          g.strokeStyle = 'rgba(96,14,16,0.22)';
+          g.lineWidth = 1;
+          g.stroke();
+        }
+      }
+    });
+    MAT.head = new THREE.MeshStandardMaterial({ map: headTex, emissiveMap: headTex, emissive: 0xffffff, emissiveIntensity: 0.38, roughness: 0.7 });
+    MAT.cere = new THREE.MeshStandardMaterial({ color: 0xffe08a, roughness: 0.4, emissive: 0x6a4a10, emissiveIntensity: 0.35 });
+    MAT.eyeRing = new THREE.MeshStandardMaterial({ color: 0x3a0a0c, roughness: 0.35 });
+    const HEAD_SPHERE = new THREE.SphereGeometry(1, 32, 24);
+
     const head = new THREE.Group();
-    head.position.set(0.42, 0.165, 0);
+    head.position.set(0.37, 0.122, 0);
     body.add(head);
-    const skull = new THREE.Mesh(BODY_SPHERE, MAT.body);
-    skull.scale.set(0.092, 0.078, 0.07);
+    const skull = new THREE.Mesh(HEAD_SPHERE, MAT.head);
+    skull.scale.set(0.108, 0.072, 0.07);
     head.add(skull);
+    const nape = new THREE.Mesh(HEAD_SPHERE, MAT.head);
+    nape.scale.set(0.07, 0.07, 0.066);
+    nape.position.set(-0.04, -0.01, 0);
+    head.add(nape);
+    const cheek = new THREE.Mesh(HEAD_SPHERE, MAT.head);
+    cheek.scale.set(0.066, 0.046, 0.064);
+    cheek.position.set(0.035, -0.032, 0);
+    head.add(cheek);
     // Bec crochu, extrudé à partir de son profil
     const beakShape = new THREE.Shape();
     beakShape.moveTo(0, 0.026);
@@ -460,17 +495,22 @@
     beakGeo.translate(0, 0, -0.017);
     {
       const pos = beakGeo.attributes.position, col = [];
-      const a = new THREE.Color('#ffe9a8'), b = new THREE.Color('#f2b13a'), c = new THREE.Color('#5a2a10');
+      const a = new THREE.Color('#ffe9a8'), b = new THREE.Color('#f2b13a'), c = new THREE.Color('#4a200c');
       for (let i = 0; i < pos.count; i++) {
         const t = clamp(pos.getX(i) / 0.104, 0, 1);
-        const k = t < 0.6 ? a.clone().lerp(b, t / 0.6) : b.clone().lerp(c, (t - 0.6) / 0.4);
+        const k = t < 0.62 ? a.clone().lerp(b, t / 0.62) : b.clone().lerp(c, (t - 0.62) / 0.38);
         col.push(k.r, k.g, k.b);
       }
       beakGeo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     }
     const beak = new THREE.Mesh(beakGeo, MAT.beak);
-    beak.position.set(0.055, -0.008, 0);
+    beak.position.set(0.078, -0.006, 0);
+    beak.scale.set(1.3, 1.3, 1.25);
     head.add(beak);
+    const cere = new THREE.Mesh(HEAD_SPHERE, MAT.cere);
+    cere.scale.set(0.022, 0.02, 0.028);
+    cere.position.set(0.084, 0.008, 0);
+    head.add(cere);
     const jawShape = new THREE.Shape();
     jawShape.moveTo(0, 0);
     jawShape.quadraticCurveTo(0.05, -0.004, 0.075, -0.012);
@@ -484,39 +524,49 @@
       jawGeo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     }
     const jaw = new THREE.Group();
-    jaw.position.set(0.058, -0.022, 0);
+    jaw.position.set(0.08, -0.03, 0);
+    jaw.scale.set(1.25, 1.25, 1.2);
     jaw.add(new THREE.Mesh(jawGeo, MAT.beak));
     head.add(jaw);
-    // Yeux et arcades
+    // Yeux sous l'arcade, cerclés de sombre, et trait sombre qui file vers l'arrière
     const eyes = [];
     for (const s of [-1, 1]) {
       const e = new THREE.Group();
-      e.position.set(0.035, 0.014, 0.05 * s);
-      const iris = new THREE.Mesh(SPHERE, MAT.iris);
-      iris.scale.setScalar(0.017);
-      const pupil = new THREE.Mesh(SPHERE, MAT.pupil);
-      pupil.scale.setScalar(0.0095);
-      pupil.position.set(0.004, 0, 0.012 * s);
-      e.add(iris, pupil);
+      e.position.set(0.048, 0.01, 0.05 * s);
+      const ring = new THREE.Mesh(HEAD_SPHERE, MAT.eyeRing);
+      ring.scale.set(0.022, 0.019, 0.012);
+      const iris = new THREE.Mesh(HEAD_SPHERE, MAT.iris);
+      iris.scale.set(0.017, 0.016, 0.012);
+      iris.position.z = 0.004 * s;
+      const pupil = new THREE.Mesh(HEAD_SPHERE, MAT.pupil);
+      pupil.scale.setScalar(0.009);
+      pupil.position.set(0.003, 0, 0.011 * s);
+      e.add(ring, iris, pupil);
       head.add(e);
       eyes.push(e);
-      const brow = new THREE.Mesh(SPHERE, MAT.brow);
-      brow.scale.set(0.034, 0.01, 0.02);
-      brow.position.set(0.042, 0.032, 0.046 * s);
-      brow.rotation.set(0, 0, -0.25);
+      const stripe = new THREE.Mesh(HEAD_SPHERE, MAT.eyeRing);
+      stripe.scale.set(0.045, 0.007, 0.01);
+      stripe.position.set(0.008, 0.006, 0.058 * s);
+      stripe.rotation.set(0, -0.35 * s, 0.12);
+      head.add(stripe);
+      // Arcade sourcilière : en avancée au-dessus de l'œil, inclinée vers le bec
+      const brow = new THREE.Mesh(HEAD_SPHERE, MAT.brow);
+      brow.scale.set(0.05, 0.014, 0.026);
+      brow.position.set(0.052, 0.03, 0.043 * s);
+      brow.rotation.set(0, 0.28 * s, -0.22);
       head.add(brow);
     }
-    // Aigrette : longues plumes qui se dressent vers l'arrière
+    // Aigrette : longues plumes couchées vers l'arrière, comme une crinière qui flotte
     const crest = [];
-    for (let i = 0; i < 7; i++) {
-      const k = (i - 3) / 3;
-      const m = featherMesh(MAT.crest, 0.42 - Math.abs(k) * 0.1, 0.07, 0.35);
-      m.position.set(-0.03, 0.055, k * 0.03);
+    for (let i = 0; i < 9; i++) {
+      const k = (i - 4) / 4;
+      const L = 0.4 - Math.abs(k) * 0.12;
+      const m = featherMesh(MAT.crest, L, 0.085, 0.32);
+      m.position.set(-0.02, 0.055 - Math.abs(k) * 0.012, k * 0.04);
       m.rotation.order = 'ZYX';
-      m.rotation.set(1.15 + k * 0.3, k * 0.3, -(0.75 + Math.abs(k) * 0.2));
+      m.rotation.set(1.35 + k * 0.2, k * 0.22, -(0.16 + 0.1 * Math.abs(k)));
       head.add(m);
       crest.push({ m, k, base: m.rotation.z });
-      anchors.push(anchor(m, -(0.42 - Math.abs(k) * 0.1), 0, 0, 0.9));
     }
 
     // Ailes : épaule → coude → poignet, avec rémiges, couvertures et os recouverts de plumes
@@ -622,9 +672,17 @@
       hip.position.set(0.03, -0.075, 0.055 * s);
       body.add(hip);
       const thigh = new THREE.Mesh(BODY_SPHERE, MAT.body);
-      thigh.scale.set(0.075, 0.1, 0.06);
-      thigh.position.set(0, -0.04, 0);
+      thigh.scale.set(0.045, 0.07, 0.034);
+      thigh.position.set(-0.015, -0.025, -0.012 * s);
       hip.add(thigh);
+      // Culotte de plumes qui retombe sur la cuisse
+      for (const [a, L] of [[-0.6, 0.13], [0, 0.15], [0.6, 0.13]]) {
+        const f = featherMesh(MAT.covert, L, 0.07, 0.1);
+        f.position.set(0.01, 0.01, Math.sin(a) * 0.035);
+        f.rotation.order = 'ZYX';
+        f.rotation.set(Math.PI / 2 + a * 0.6, 0, Math.PI / 2 - 0.15);
+        hip.add(f);
+      }
       const shin = new THREE.Group();
       shin.position.set(0, -0.11, 0);
       hip.add(shin);
@@ -789,7 +847,7 @@
     let time = 0, paused = false, hidden = false, raf = 0, last = 0;
     const st = {
       state: 'perch', pos: new V3(), vel: new V3(),
-      yaw: -0.55, yawTarget: -0.55, yawRate: 0, pitch: 0.95, roll: 0, dir: 1,
+      yaw: -0.55, yawTarget: -0.55, yawRate: 0, pitch: 0.8, roll: 0, dir: 1,
       phase: 0, glide: 0, gliding: false, glideT: 0, beats: 6,
       fold: 1, legs: 1, tailSpread: 0.6, flap: 0, ext: 0, sweep: 0, upFold: 0,
       timer: 3.5, flyTime: 0, target: null, perch: null, lastPerch: null, lastCenter: -99,
@@ -1001,7 +1059,7 @@
         if (Math.abs(st.yawTarget - t) > 0.1) { if (st.yaw > 0) st.yaw -= TAU; st.yawTarget = t; }
       }
       turn(dt, 3);
-      st.pitch = ease(st.pitch, 0.95, dt, 6);
+      st.pitch = ease(st.pitch, 0.8, dt, 6);
       st.roll = ease(st.roll, 0, dt, 6);
       st.legs = ease(st.legs, 1, dt, 8);
       st.tailSpread = ease(st.tailSpread, 0.55, dt, 4);
@@ -1011,7 +1069,7 @@
       const hx = pw.x - st.pos.x, hy = pw.y - (st.pos.y + 0.3 * S);
       const look = time - pointer.moved < 3;
       st.headYaw = ease(st.headYaw, look ? clamp(Math.atan2(hx, 4 * S) * (Math.cos(st.yaw) >= 0 ? 1 : -1) * 0.6, -0.7, 0.7) : 0.15 * Math.sin(time * 0.7), dt, 5);
-      st.headPitch = ease(st.headPitch, -st.pitch * 0.85 + (look ? clamp(hy / (6 * S), -0.4, 0.4) : 0), dt, 5);
+      st.headPitch = ease(st.headPitch, -st.pitch * 0.95 + (look ? clamp(hy / (6 * S), -0.4, 0.4) : 0), dt, 5);
 
       if (reduce.matches) { st.fold = 1; st.ext = 0; st.flap = -0.1; alignFeet(tg); return; }
 
@@ -1060,7 +1118,7 @@
       const list = candidates();
       st.perch = list.length ? { el: list[0], fx: 0.8 } : { px: W - S * 1.2, py: H - S * 0.3 };
       st.state = 'perch';
-      st.fold = 1; st.ext = 0; st.flap = -0.1; st.legs = 1; st.pitch = 0.95;
+      st.fold = 1; st.ext = 0; st.flap = -0.1; st.legs = 1; st.pitch = 0.8;
     }
 
     /* ---------- Centre de l'écran : vol sur place, ou traversée ---------- */
@@ -1303,7 +1361,7 @@
       jaw.rotation.z = -0.35 * st.beak;
       const blink = st.blinkT > 0 ? 0.12 : 1;
       for (const e of eyes) e.scale.set(1, blink, 1);
-      for (const c of crest) c.m.rotation.z = c.base + 0.08 * Math.sin(time * 3 + c.k * 2) + Math.min(0.3, speed * 0.08);
+      for (const c of crest) c.m.rotation.z = c.base + 0.07 * Math.sin(time * 3 + c.k * 2) + Math.min(0.12, speed * 0.04);
       bird.updateMatrixWorld(true);
     }
 
@@ -1311,7 +1369,7 @@
     function emit(dt) {
       if (reduce.matches || !st.visible) return;
       const flying = st.state !== 'perch';
-      const rate = (flying ? 900 : 520) * quality;
+      const rate = (flying ? 900 : 320) * quality;
       let n = rate * dt;
       const z = st.pos.z;
       const persp = Math.min(2.5, D / Math.max(200, D - z));
