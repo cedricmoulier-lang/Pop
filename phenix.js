@@ -214,19 +214,20 @@
       small: ramp([[0, [236, 132, 48]], [0.5, [226, 112, 40]], [1, [240, 160, 72]]]),
     };
     const FEATHER = {
-      primary: { top: 0.17, bot: 0.45, tip: 0.12, round: 0.55, spacing: 2.4 },
-      secondary: { top: 0.3, bot: 0.45, tip: 0.18, round: 0.8, spacing: 2.6 },
-      covert: { top: 0.42, bot: 0.42, tip: 0.35, round: 0.9, spacing: 2.8, down: 0.22 },
-      tail: { top: 0.42, bot: 0.42, tip: 0.14, round: 0.7, spacing: 2.4 },
-      crest: { top: 0.2, bot: 0.2, tip: 0.08, round: 0.3, spacing: 2.2, down: 0.25 },
-      contour: { top: 0.44, bot: 0.44, tip: 0.32, round: 0.85, spacing: 3, slant: 1.1, down: 0.3 },
-      small: { top: 0.46, bot: 0.46, tip: 0.5, round: 1, spacing: 5, slant: 1, down: 0 },
+      // occ : ombre vers la base, là où la plume passe sous la rangée précédente
+      primary: { top: 0.17, bot: 0.45, tip: 0.12, round: 0.55, spacing: 2.4, occ: 0.12 },
+      secondary: { top: 0.3, bot: 0.45, tip: 0.18, round: 0.8, spacing: 2.6, occ: 0.2 },
+      covert: { top: 0.42, bot: 0.42, tip: 0.35, round: 0.9, spacing: 2.8, down: 0.22, occ: 0.32 },
+      tail: { top: 0.42, bot: 0.42, tip: 0.14, round: 0.7, spacing: 2.4, occ: 0.12 },
+      crest: { top: 0.2, bot: 0.2, tip: 0.08, round: 0.3, spacing: 2.2, down: 0.25, occ: 0.15 },
+      contour: { top: 0.44, bot: 0.44, tip: 0.32, round: 0.85, spacing: 3, slant: 1.1, down: 0.3, occ: 0.42 },
+      small: { top: 0.46, bot: 0.46, tip: 0.5, round: 1, spacing: 5, slant: 1, down: 0, occ: 0.36 },
     };
     function realFeather(kind) {
       const P = FEATHER[kind], col = PAL[kind];
       return featherPair(512, 128, { width: profile(P), spacing: P.spacing, slant: P.slant, down: P.down ?? 0.12, color: (t, s) => {
-        const c = col(t); // le bord de la vexille un peu plus sombre
-        return [c[0] * (1 - 0.12 * s), c[1] * (1 - 0.16 * s), c[2] * (1 - 0.16 * s)];
+        const c = col(t), o = 1 - P.occ * smooth((t - 0.3) / 0.55); // bord de la vexille et base un peu plus sombres
+        return [c[0] * (1 - 0.12 * s) * o, c[1] * (1 - 0.16 * s) * o ** 1.5, c[2] * (1 - 0.16 * s) * o ** 2]; // l'ombre tire vers le rouge
       } });
     }
 
@@ -315,6 +316,8 @@
     for (const t of [TEX.body.map, TEX.body.normalMap]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 2); }
     // Plumes : relief des barbes, reflet velouté sous la lumière rasante (sheen), lueur interne discrète,
     // bords adoucis par l'anticrénelage (alphaToCoverage), teinte propre à chaque plume (couleurs de sommets)
+    // Bords des plumes anticrénelés par alphaToCoverage (échantillon par échantillon) ; l'opacité du
+    // canevas est ensuite rétablie là où il y a de l'oiseau (voir sealMat).
     const featherMat = (tex, glow, tint = true) => new THREE.MeshPhysicalMaterial({
       map: tex.map, normalMap: tex.normalMap, normalScale: new THREE.Vector2(0.9, 0.9),
       emissiveMap: tex.map, emissive: 0xffffff, emissiveIntensity: glow,
@@ -323,13 +326,13 @@
       alphaTest: 0.25, alphaToCoverage: true, side: THREE.DoubleSide,
     });
     const MAT = {
-      primary: featherMat(TEX.primary, 0.2),
-      secondary: featherMat(TEX.secondary, 0.22),
-      covert: featherMat(TEX.covert, 0.24),
-      bodyCovert: featherMat(TEX.contour, 0.24),
-      headFeather: featherMat(TEX.small, 0.22),
-      tail: featherMat(TEX.tail, 0.2),
-      crest: featherMat(TEX.crest, 0.26),
+      primary: featherMat(TEX.primary, 0.28),
+      secondary: featherMat(TEX.secondary, 0.3),
+      covert: featherMat(TEX.covert, 0.32),
+      bodyCovert: featherMat(TEX.contour, 0.32),
+      headFeather: featherMat(TEX.small, 0.3),
+      tail: featherMat(TEX.tail, 0.28),
+      crest: featherMat(TEX.crest, 0.32),
       plume: featherMat(TEX.plume, 0.28, false),
       body: new THREE.MeshStandardMaterial({ map: TEX.body.map, normalMap: TEX.body.normalMap, emissiveMap: TEX.body.map, emissive: 0xffffff, emissiveIntensity: 0.22, roughness: 0.8 }),
       leg: new THREE.MeshStandardMaterial({ map: TEX.scales.map, normalMap: TEX.scales.normalMap, roughness: 0.5, emissive: 0x3a1606, emissiveIntensity: 0.4 }),
@@ -350,33 +353,42 @@
     // Variante « pivot » (plumes fusionnées des ailes) : chaque plume tourne en plus autour de sa base,
     // de son angle replié à son angle déployé (uExt, commun aux deux ailes) — un seul objet par rangée.
     const FOLDU = { ext: { value: 0 }, jit: { value: 0 } };
-    function softFeathers(mat, shared, pivot) {
-      const u = shared || { bend: { value: 0 }, flutter: { value: 0 }, ripple: { value: 0 }, time: { value: 0 } };
-      mat.onBeforeCompile = (sh) => {
-        sh.uniforms.uBend = u.bend;
-        sh.uniforms.uFlutter = u.flutter;
-        sh.uniforms.uRipple = u.ripple;
-        sh.uniforms.uTime = u.time;
-        sh.uniforms.uExt = FOLDU.ext;
-        sh.uniforms.uJit = FOLDU.jit;
-        let vs = 'uniform float uBend; uniform float uFlutter; uniform float uRipple; uniform float uTime; uniform float uExt; uniform float uJit;\n'
-          + 'attribute float aPhase; attribute float aFlex; attribute float aT; attribute float aW; attribute vec3 aN;\n'
-          + (pivot ? 'attribute vec3 aPivot; attribute vec2 aFoldExt;\n' : '') + sh.vertexShader;
-        if (pivot) {
-          vs = vs.replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
-            float fAng = mix(aFoldExt.x, aFoldExt.y, uExt) + uJit * sin(uTime * 4.7 + aPhase * 3.0);
-            float fC = cos(fAng), fS = sin(fAng);
+    function softInject(sh, u, pivot, normals) {
+      sh.uniforms.uBend = u.bend;
+      sh.uniforms.uFlutter = u.flutter;
+      sh.uniforms.uRipple = u.ripple;
+      sh.uniforms.uTime = u.time;
+      sh.uniforms.uExt = FOLDU.ext;
+      sh.uniforms.uJit = FOLDU.jit;
+      const ang = `float fAng = mix(aFoldExt.x, aFoldExt.y, uExt) + uJit * sin(uTime * 4.7 + aPhase * 3.0);
+            float fC = cos(fAng), fS = sin(fAng);`;
+      let vs = 'uniform float uBend; uniform float uFlutter; uniform float uRipple; uniform float uTime; uniform float uExt; uniform float uJit;\n'
+        + 'attribute float aPhase; attribute float aFlex; attribute float aT; attribute float aW; attribute vec3 aN;\n'
+        + (pivot ? 'attribute vec3 aPivot; attribute vec2 aFoldExt;\n' : '') + sh.vertexShader;
+      if (pivot && normals) {
+        vs = vs.replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+            ${ang}
             objectNormal = vec3(fC * objectNormal.x + fS * objectNormal.z, objectNormal.y, -fS * objectNormal.x + fC * objectNormal.z);`);
-        }
-        vs = vs.replace('#include <begin_vertex>', `#include <begin_vertex>
+      }
+      vs = vs.replace('#include <begin_vertex>', `#include <begin_vertex>
             // aT : distance à la base de la plume, aW : position en travers, aN : normale de la plume
             transformed += aN * (aFlex * aT * aT * (uBend + uFlutter * sin(uTime * 11.0 + aPhase - aT * 8.0))
               + aW * aT * aFlex * uRipple * sin(uTime * 16.0 + aPhase * 1.7 - aT * 11.0));` + (pivot ? `
+            ${normals ? '' : ang}
             vec3 fLp = transformed - aPivot;
             transformed = aPivot + vec3(fC * fLp.x + fS * fLp.z, fLp.y, -fS * fLp.x + fC * fLp.z);` : ''));
-        sh.vertexShader = vs;
-      };
+      sh.vertexShader = vs;
+    }
+    function softFeathers(mat, shared, pivot) {
+      const u = shared || { bend: { value: 0 }, flutter: { value: 0 }, ripple: { value: 0 }, time: { value: 0 } };
+      mat.onBeforeCompile = (sh) => softInject(sh, u, pivot, true);
       mat.customProgramCacheKey = () => (pivot ? 'plume-pivot' : 'plume');
+      if (pivot) {
+        // pour l'ombre portée, la même plume pivotée (sinon l'ombre serait celle de l'aile au repos)
+        mat.userData.depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: mat.map, alphaTest: mat.alphaTest, side: THREE.DoubleSide });
+        mat.userData.depth.onBeforeCompile = (sh) => softInject(sh, u, true, false);
+        mat.userData.depth.customProgramCacheKey = () => 'plume-pivot-ombre';
+      }
       return u;
     }
     const SOFT = {
@@ -412,6 +424,7 @@
       geo.setIndex(IDX);
       const m = new THREE.Mesh(geo, mat);
       m.frustumCulled = false; // la forme dépliée sort de la boîte englobante calculée au repos
+      m.customDepthMaterial = mat.userData.depth;
       return m;
     }
 
@@ -550,12 +563,12 @@
       const c = torsoAt(x), L = 0.15 - row * 0.006;
       const n = Math.round((TAU * (c.ry + c.rz) / 2) / 0.058);
       for (let i = 0; i < n; i++) {
-        const a = -Math.PI + ((i + (row % 2) * 0.5) / n) * TAU;
+        const a = -Math.PI + ((i + (row % 2) * 0.5 + rand(-0.22, 0.22)) / n) * TAU;
         const ra = Math.hypot(Math.cos(a) * c.ry, Math.sin(a) * c.rz);
         const b = torsoAt(x - L), rb = Math.hypot(Math.cos(a) * b.ry, Math.sin(a) * b.rz);
         const tilt = Math.atan2(ra - rb, L) + 0.06; // la plume suit la pente du corps, pointe vers lui
         plumage.push({ L: L * (0.9 + 0.2 * Math.random()), w: 0.085, bend: 0.1, flex: 0.65,
-          pos: new V3(x, c.y + Math.cos(a) * c.ry * 0.97, Math.sin(a) * c.rz * 0.97), rot: new THREE.Euler(a, 0, tilt) });
+          pos: new V3(x + rand(-0.012, 0.012), c.y + Math.cos(a) * c.ry * 0.97, Math.sin(a) * c.rz * 0.97), rot: new THREE.Euler(a + rand(-0.05, 0.05), rand(-0.12, 0.12), tilt) });
       }
     });
     torso.add(mergeFeathers(plumage, MAT.bodyCovert));
@@ -987,10 +1000,23 @@
     scene.add(bird);
     scene.add(loose);
     for (const p of plumes) scene.add(p.mesh);
-    scene.add(new THREE.HemisphereLight(0xfff2dc, 0x6a1c12, 0.55));
+    scene.add(new THREE.HemisphereLight(0xffe6c8, 0x8a2410, 0.6)); // ciel chaud, reflet rouge sombre par-dessous
     const key = new THREE.DirectionalLight(0xfff4e6, 2.6);
-    key.position.set(-0.6, 1, 0.9);
-    scene.add(key);
+    const KEY_DIR = new V3(-0.6, 1, 0.9).normalize();
+    key.position.copy(KEY_DIR);
+    scene.add(key, key.target);
+    // Ombres portées de l'oiseau sur lui-même : les ailes sur le corps, chaque rang de plumes sur le
+    // suivant, la tête sur le cou. La lumière suit l'oiseau, son cadre d'ombre est ajusté à sa taille.
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    key.castShadow = true;
+    key.shadow.mapSize.set(1024, 1024);
+    key.shadow.bias = -0.0004;
+    key.shadow.normalBias = 0.4;
+    key.shadow.radius = 2;
+    const shadowed = (o) => { if (o.isMesh && o.material !== MAT.cornea && o.material !== MAT.mark) { o.castShadow = true; o.receiveShadow = true; } };
+    bird.traverse(shadowed);
+    for (const p of plumes) shadowed(p.mesh);
     const rim = new THREE.DirectionalLight(0xff9a40, 1.6);
     rim.position.set(0.5, 0.25, -1);
     scene.add(rim);
@@ -1235,6 +1261,16 @@
           gl_FragColor = vec4(col * a + vec3(1.0, 0.45, 0.1) * ga, A);
         }`,
       depthTest: false, depthWrite: false, blending: THREE.NoBlending,
+    });
+    // Le canevas est posé sur la page : un échantillon où une plume n'est couverte qu'en partie garde une
+    // opacité partielle, et la page transparaissait à travers le corps le long de chaque plume. Après
+    // l'oiseau, on rend donc opaque (sans toucher aux couleurs) tout échantillon qui a reçu sa profondeur.
+    const sealMat = new THREE.ShaderMaterial({
+      vertexShader: 'void main() { gl_Position = vec4(position.xy, 0.99999, 1.0); }',
+      fragmentShader: 'void main() { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); }',
+      depthTest: true, depthWrite: false, depthFunc: THREE.GreaterDepth,
+      blending: THREE.CustomBlending, blendSrc: THREE.ZeroFactor, blendDst: THREE.OneFactor,
+      blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.ZeroFactor,
     });
     const blitMat = new THREE.ShaderMaterial(Object.assign({
       uniforms: { map: { value: null } },
@@ -2148,6 +2184,8 @@
 
     function render() {
       bird.visible = st.visible;
+      key.position.copy(st.pos).addScaledVector(KEY_DIR, 6 * S);
+      key.target.position.copy(st.pos);
       for (const p of plumes) p.mesh.visible = st.visible;
       centerMark.getWorldPosition(tmpV);
       glow.position.copy(tmpV);
@@ -2192,6 +2230,7 @@
         renderer.setScissorTest(false);
       }
       renderer.render(scene, camera);
+      drawQuad(sealMat);
       // 4. Traversée de l'écran
       if (impactT >= 0) {
         impactMat.uniforms.k.value = impactT;
@@ -2234,6 +2273,12 @@
       camera.position.set(0, 0, D);
       camera.lookAt(0, 0, 0);
       camera.updateProjectionMatrix();
+      const sc = key.shadow.camera;
+      sc.left = sc.bottom = -2.4 * S;
+      sc.right = sc.top = 2.4 * S;
+      sc.near = 2 * S;
+      sc.far = 10 * S;
+      sc.updateProjectionMatrix();
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setSize(W, H, false);
       {
