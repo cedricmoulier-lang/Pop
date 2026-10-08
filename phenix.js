@@ -127,6 +127,7 @@
         covert: { top: 0.42, bot: 0.42, tip: 0.35, round: 0.9 },
         tail: { top: 0.42, bot: 0.42, tip: 0.14, round: 0.7 },
         crest: { top: 0.2, bot: 0.2, tip: 0.08, round: 0.3 },
+        contour: { top: 0.44, bot: 0.44, tip: 0.32, round: 0.85, soft: true }, // plumes du corps : douces, sans liseré
       }[kind];
       return canvasTex(512, 128, (g, W, H) => {
         const cy = H / 2;
@@ -148,14 +149,22 @@
         vane.closePath();
         g.save();
         g.clip(vane);
-        g.fillStyle = fireGradient(g, W);
+        if (P.soft) {
+          const sg = g.createLinearGradient(0, 0, W, 0);
+          sg.addColorStop(0, '#ffc55e');
+          sg.addColorStop(0.45, '#ff9636');
+          sg.addColorStop(1, '#de5422');
+          g.fillStyle = sg;
+        } else {
+          g.fillStyle = fireGradient(g, W);
+        }
         g.fillRect(0, 0, W, H);
         // Modelé : lumière sur un bord, ombre sur l'autre
         const vg = g.createLinearGradient(0, 0, 0, H);
         vg.addColorStop(0, 'rgba(255,240,205,0.28)');
         vg.addColorStop(0.42, 'rgba(255,240,205,0)');
         vg.addColorStop(0.58, 'rgba(90,10,15,0)');
-        vg.addColorStop(1, 'rgba(90,10,15,0.42)');
+        vg.addColorStop(1, `rgba(90,10,15,${P.soft ? 0.16 : 0.42})`);
         g.fillStyle = vg;
         g.fillRect(0, 0, W, H);
         // Barbes fines, alternativement claires et sombres
@@ -171,6 +180,21 @@
           g.stroke();
         }
         g.restore();
+        if (P.soft) {
+          // Bords duveteux : la plume se fond dans ses voisines
+          g.globalCompositeOperation = 'destination-in';
+          g.filter = 'blur(5px)';
+          g.fill(vane);
+          g.filter = 'none';
+          g.globalCompositeOperation = 'source-over';
+          g.strokeStyle = 'rgba(255,240,200,0.35)';
+          g.lineWidth = 2;
+          g.beginPath();
+          g.moveTo(W * 0.2, cy);
+          g.lineTo(W, cy);
+          g.stroke();
+          return;
+        }
         // Petites fentes dans la vexille, comme sur une vraie plume
         g.save();
         g.globalCompositeOperation = 'destination-out';
@@ -314,6 +338,7 @@
       covert: featherTex('covert'),
       tail: featherTex('tail'),
       crest: featherTex('crest'),
+      contour: featherTex('contour'),
       plume: plumeTex(),
       body: bodyTex(),
     };
@@ -326,6 +351,7 @@
       primary: featherMat(TEX.primary, 0.42),
       secondary: featherMat(TEX.secondary, 0.45),
       covert: featherMat(TEX.covert, 0.5),
+      bodyCovert: Object.assign(featherMat(TEX.contour, 0.46), { alphaTest: 0.2, alphaToCoverage: true }),
       tail: featherMat(TEX.tail, 0.42),
       crest: featherMat(TEX.crest, 0.5),
       plume: featherMat(TEX.plume, 0.48),
@@ -346,8 +372,32 @@
       return g;
     })();
 
-    // Plume : un plan légèrement incurvé, base à l'origine, bout vers -X.
-    function featherMesh(mat, L, w, bend) {
+    // Plumes souples : chaque plume fléchit sur sa longueur (de plus en plus vers la pointe), ondule
+    // et son bord de fuite frémit dans l'air. Le calcul se fait dans le shader ; chaque groupe de plumes
+    // (rémiges, couvertures, aigrette, queue, plumes du corps) a ses propres réglages, mis à jour à chaque image.
+    function softFeathers(mat) {
+      const u = { bend: { value: 0 }, flutter: { value: 0 }, ripple: { value: 0 }, time: { value: 0 } };
+      mat.onBeforeCompile = (sh) => {
+        sh.uniforms.uBend = u.bend;
+        sh.uniforms.uFlutter = u.flutter;
+        sh.uniforms.uRipple = u.ripple;
+        sh.uniforms.uTime = u.time;
+        sh.vertexShader = 'uniform float uBend; uniform float uFlutter; uniform float uRipple; uniform float uTime;\n'
+          + 'attribute float aPhase; attribute float aFlex; attribute float aT; attribute float aW; attribute vec3 aN;\n'
+          + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+            // aT : distance à la base de la plume, aW : position en travers, aN : normale de la plume
+            transformed += aN * (aFlex * aT * aT * (uBend + uFlutter * sin(uTime * 11.0 + aPhase - aT * 8.0))
+              + aW * aT * aFlex * uRipple * sin(uTime * 16.0 + aPhase * 1.7 - aT * 11.0));`);
+      };
+      return u;
+    }
+    const SOFT = {
+      primary: softFeathers(MAT.primary), secondary: softFeathers(MAT.secondary), covert: softFeathers(MAT.covert),
+      body: softFeathers(MAT.bodyCovert), crest: softFeathers(MAT.crest), tail: softFeathers(MAT.tail),
+    };
+
+    // Plume : un plan légèrement incurvé, base à l'origine, bout vers -X ; flex règle sa souplesse.
+    function featherMesh(mat, L, w, bend, flex = 1) {
       const geo = new THREE.PlaneGeometry(L, w, 6, 1);
       geo.rotateX(-Math.PI / 2);
       geo.translate(-L / 2, 0, 0);
@@ -357,6 +407,41 @@
         pos.setY(i, pos.getY(i) + bend * L * t * t);
       }
       geo.computeVertexNormals();
+      const n = pos.count, aT = new Float32Array(n), aW = new Float32Array(n), aN = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { aT[i] = Math.max(0, -pos.getX(i)); aW[i] = pos.getZ(i); aN[i * 3 + 1] = 1; }
+      geo.setAttribute('aPhase', new THREE.BufferAttribute(new Float32Array(n).fill(Math.random() * TAU), 1));
+      geo.setAttribute('aFlex', new THREE.BufferAttribute(new Float32Array(n).fill(flex), 1));
+      geo.setAttribute('aT', new THREE.BufferAttribute(aT, 1));
+      geo.setAttribute('aW', new THREE.BufferAttribute(aW, 1));
+      geo.setAttribute('aN', new THREE.BufferAttribute(aN, 3));
+      return new THREE.Mesh(geo, mat);
+    }
+    // Des dizaines de petites plumes fusionnées en un seul objet (un seul appel de dessin), chacune
+    // gardant sa souplesse propre. items : [{ L, w, bend, flex, pos, rot }]
+    function mergeFeathers(items, mat) {
+      const P = [], Nn = [], UV = [], PH = [], FX = [], T = [], WW = [], AN = [], IDX = [];
+      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new V3(), one = new V3(1, 1, 1);
+      for (const it of items) {
+        const g = featherMesh(mat, it.L, it.w, it.bend, it.flex).geometry;
+        q.setFromEuler(it.rot);
+        m4.compose(it.pos, q, one);
+        const base = P.length / 3, pos = g.attributes.position, nor = g.attributes.normal, uv = g.attributes.uv;
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(m4); P.push(v.x, v.y, v.z);
+          v.fromBufferAttribute(nor, i).applyQuaternion(q); Nn.push(v.x, v.y, v.z);
+          v.set(0, 1, 0).applyQuaternion(q); AN.push(v.x, v.y, v.z);
+          UV.push(uv.getX(i), uv.getY(i));
+        }
+        PH.push(...g.attributes.aPhase.array); FX.push(...g.attributes.aFlex.array);
+        T.push(...g.attributes.aT.array); WW.push(...g.attributes.aW.array);
+        for (const k of g.index.array) IDX.push(base + k);
+        g.dispose();
+      }
+      const geo = new THREE.BufferGeometry();
+      const set = (name, arr, k) => geo.setAttribute(name, new THREE.Float32BufferAttribute(arr, k));
+      set('position', P, 3); set('normal', Nn, 3); set('uv', UV, 2); set('aPhase', PH, 1); set('aFlex', FX, 1);
+      set('aT', T, 1); set('aW', WW, 1); set('aN', AN, 3);
+      geo.setIndex(IDX);
       return new THREE.Mesh(geo, mat);
     }
     // Corps d'un seul tenant : une suite d'ellipses de la queue jusqu'à la tête, lissée.
@@ -408,7 +493,7 @@
     bird.add(body);
 
     // Tronc et cou d'un seul tenant : poitrail profond, croupion effilé, cou court et épais
-    const torso = new THREE.Mesh(loftGeo([
+    const TORSO = [
       [-0.36, 0.012, 0.03, 0.045],
       [-0.27, 0.004, 0.072, 0.085],
       [-0.15, -0.004, 0.122, 0.128],
@@ -418,17 +503,37 @@
       [0.25, 0.04, 0.112, 0.102],
       [0.3, 0.078, 0.094, 0.087],
       [0.34, 0.105, 0.082, 0.077],
-    ], 52, 32), MAT.body);
+    ];
+    const torso = new THREE.Mesh(loftGeo(TORSO, 52, 32), MAT.body);
     body.add(torso);
-    // Camail : rangs de plumes pointues couchées sur le cou, qui retombent vers les épaules
+    // Section du tronc à l'abscisse x : centre et demi-axes (interpolés entre les anneaux)
+    function torsoAt(x) {
+      let j = 1;
+      while (j < TORSO.length - 1 && TORSO[j][0] < x) j++;
+      const a = TORSO[j - 1], b = TORSO[j], f = clamp((x - a[0]) / (b[0] - a[0]), 0, 1);
+      return { y: lerp(a[1], b[1], f), ry: lerp(a[2], b[2], f), rz: lerp(a[3], b[3], f) };
+    }
+    // Plumage : camail de plumes pointues sur le cou, puis plumes de contour en rangs qui se chevauchent
+    // sur le poitrail, les flancs, le dos et le croupion, toutes couchées vers la queue.
+    const plumage = [];
     for (const [x, y, r, L] of [[0.22, 0.03, 0.125, 0.16], [0.27, 0.06, 0.106, 0.14], [0.31, 0.088, 0.09, 0.12]]) {
       for (const a of [-1.75, -1.15, -0.55, 0, 0.55, 1.15, 1.75]) {
-        const m = featherMesh(MAT.covert, L, 0.075, 0.12);
-        m.position.set(x + 0.02, y + Math.cos(a) * r * 0.92, Math.sin(a) * r * 0.92);
-        m.rotation.set(a, 0, 0.18);
-        body.add(m);
+        plumage.push({ L, w: 0.075, bend: 0.12, flex: 0.8, pos: new V3(x + 0.02, y + Math.cos(a) * r * 0.92, Math.sin(a) * r * 0.92), rot: new THREE.Euler(a, 0, 0.18) });
       }
     }
+    [0.19, 0.12, 0.05, -0.02, -0.09, -0.16, -0.23].forEach((x, row) => {
+      const c = torsoAt(x), L = 0.15 - row * 0.006;
+      const n = Math.round((TAU * (c.ry + c.rz) / 2) / 0.058);
+      for (let i = 0; i < n; i++) {
+        const a = -Math.PI + ((i + (row % 2) * 0.5) / n) * TAU;
+        const ra = Math.hypot(Math.cos(a) * c.ry, Math.sin(a) * c.rz);
+        const b = torsoAt(x - L), rb = Math.hypot(Math.cos(a) * b.ry, Math.sin(a) * b.rz);
+        const tilt = Math.atan2(ra - rb, L) + 0.06; // la plume suit la pente du corps, pointe vers lui
+        plumage.push({ L: L * (0.9 + 0.2 * Math.random()), w: 0.085, bend: 0.1, flex: 0.65,
+          pos: new V3(x, c.y + Math.cos(a) * c.ry * 0.97, Math.sin(a) * c.rz * 0.97), rot: new THREE.Euler(a, 0, tilt) });
+      }
+    });
+    torso.add(mergeFeathers(plumage, MAT.bodyCovert));
     anchors.push(anchor(body, -0.05, 0.13, 0, 1), anchor(body, -0.2, 0.08, 0, 1), anchor(body, 0.15, -0.12, 0, 0.9));
     flameAt(body, -0.08, 0.12, 0.03, 1, 0.2);
     flameAt(body, -0.22, 0.07, -0.03, 1, 0.18);
@@ -600,7 +705,7 @@
     for (let i = 0; i < 9; i++) {
       const k = (i - 4) / 4;
       const L = 0.4 - Math.abs(k) * 0.12;
-      const m = featherMesh(MAT.crest, L, 0.085, 0.32);
+      const m = featherMesh(MAT.crest, L, 0.085, 0.32, 1.3);
       m.position.set(-0.02, 0.055 - Math.abs(k) * 0.012, k * 0.04);
       m.rotation.order = 'ZYX';
       m.rotation.set(1.35 + k * 0.2, k * 0.22, -(0.16 + 0.1 * Math.abs(k)));
@@ -632,53 +737,43 @@
       bone(elbow, 0.34, 0.024);
       bone(wrist, 0.26, 0.018);
       const feathers = [], tips = [];
-      const add = (group, mat, L, w, x, y, z, ext, fold, bend) => {
-        const m = featherMesh(mat, L, w, bend);
+      const add = (group, mat, L, w, x, y, z, ext, fold, bend, flex) => {
+        const m = featherMesh(mat, L, w, bend, flex);
         m.position.set(x, y, z);
         group.add(m);
-        feathers.push({ m, ext, fold });
+        feathers.push({ m, ext, fold, j: feathers.length });
         return m;
       };
       // Rémiges primaires, sur la main
       for (let i = 0; i < 10; i++) {
         const r = i / 9;
         const L = lerp(0.42, 0.6, r) * (i === 9 ? 0.92 : 1);
-        const m = add(wrist, MAT.primary, L, 0.085, 0, 0.0014 * (10 - i), 0.02 + i * 0.026, lerp(0.42, 1.42, r ** 0.9), 1.5, 0.1);
+        const m = add(wrist, MAT.primary, L, 0.085, 0, 0.0014 * (10 - i), 0.02 + i * 0.026, lerp(0.42, 1.42, r ** 0.9), 1.5, 0.1, 1);
         if (i >= 5) tips.push(anchor(m, -L, 0, 0, 0.8));
         if (i % 2 === 1) flameAt(m, -L * 0.85, 0, 0, 0.85, 0.2);
       }
       // Rémiges secondaires, sur l'avant-bras
       for (let i = 0; i < 12; i++) {
         const r = i / 11;
-        const sec = add(elbow, MAT.secondary, 0.34, 0.1, -0.005, 0.016 + 0.0013 * (12 - i), 0.012 + i * 0.026, lerp(0.05, 0.38, r), -1.45, 0.06);
+        const sec = add(elbow, MAT.secondary, 0.34, 0.1, -0.005, 0.016 + 0.0013 * (12 - i), 0.012 + i * 0.026, lerp(0.05, 0.38, r), -1.45, 0.06, 0.8);
         if (i % 3 === 1) flameAt(sec, -0.3, 0, 0, 0.9, 0.17);
       }
       // Tertiaires, près du corps
-      for (let i = 0; i < 4; i++) add(shoulder, MAT.secondary, 0.3, 0.1, -0.01, 0.034 + 0.0013 * i, 0.05 + i * 0.055, -0.12, 0.55, 0.05);
+      for (let i = 0; i < 4; i++) add(shoulder, MAT.secondary, 0.3, 0.1, -0.01, 0.034 + 0.0013 * i, 0.05 + i * 0.055, -0.12, 0.55, 0.05, 0.7);
       // Grandes couvertures
-      for (let i = 0; i < 9; i++) add(elbow, MAT.covert, 0.18, 0.08, 0.03, 0.05 + 0.001 * i, 0.02 + i * 0.033, lerp(0.05, 0.38, i / 8), -1.45, 0.08);
-      for (let i = 0; i < 6; i++) add(wrist, MAT.covert, 0.17, 0.07, 0.025, 0.05 + 0.001 * i, 0.02 + i * 0.04, lerp(0.45, 1.3, i / 5), 1.5, 0.08);
+      for (let i = 0; i < 9; i++) add(elbow, MAT.covert, 0.18, 0.08, 0.03, 0.05 + 0.001 * i, 0.02 + i * 0.033, lerp(0.05, 0.38, i / 8), -1.45, 0.08, 0.5);
+      for (let i = 0; i < 6; i++) add(wrist, MAT.covert, 0.17, 0.07, 0.025, 0.05 + 0.001 * i, 0.02 + i * 0.04, lerp(0.45, 1.3, i / 5), 1.5, 0.08, 0.5);
       // Petites couvertures
-      for (let i = 0; i < 9; i++) add(elbow, MAT.covert, 0.1, 0.065, 0.06, 0.062 + 0.001 * i, 0.02 + i * 0.033, 0.2, -1.4, 0.1);
-      for (let i = 0; i < 5; i++) add(shoulder, MAT.covert, 0.12, 0.07, 0.045, 0.066 + 0.001 * i, 0.04 + i * 0.05, -0.05, 0.5, 0.1);
+      for (let i = 0; i < 9; i++) add(elbow, MAT.covert, 0.1, 0.065, 0.06, 0.062 + 0.001 * i, 0.02 + i * 0.033, 0.2, -1.4, 0.1, 0.35);
+      for (let i = 0; i < 5; i++) add(shoulder, MAT.covert, 0.12, 0.07, 0.045, 0.066 + 0.001 * i, 0.04 + i * 0.05, -0.05, 0.5, 0.1, 0.35);
       tips.push(anchor(wrist, 0, 0, 0.26, 0.9));
       return { root, shoulder, elbow, wrist, feathers, tips };
     }
     const wings = [buildWing(1), buildWing(-1)];
     for (const w of wings) { body.add(w.root); anchors.push(...w.tips); }
 
-    // Queue : rectrices en éventail qui fléchissent et frémissent dans l'air (dans le shader),
-    // et trois longues plumes souples simulées (voir updatePlumes).
-    const tailU = { bend: { value: 0 }, flutter: { value: 0 }, time: { value: 0 } };
-    MAT.tail.onBeforeCompile = (sh) => {
-      sh.uniforms.uBend = tailU.bend;
-      sh.uniforms.uFlutter = tailU.flutter;
-      sh.uniforms.uTime = tailU.time;
-      sh.vertexShader = 'uniform float uBend; uniform float uFlutter; uniform float uTime; attribute float aPhase;\n' +
-        sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-          float tl = max(0.0, -position.x);
-          transformed.y += tl * tl * (uBend + uFlutter * sin(uTime * 11.0 + aPhase - tl * 7.0));`);
-    };
+    // Queue : rectrices en éventail, souples comme les autres plumes,
+    // et trois longues plumes simulées (voir updatePlumes).
     const tail = new THREE.Group();
     tail.position.set(-0.25, -0.005, 0);
     body.add(tail);
@@ -687,7 +782,6 @@
       const k = (i - 5.5) / 5.5;
       const L = 0.6 + 0.2 * (1 - Math.abs(k));
       const m = featherMesh(MAT.tail, L, 0.12, -0.04);
-      m.geometry.setAttribute('aPhase', new THREE.BufferAttribute(new Float32Array(m.geometry.attributes.position.count).fill(i * 1.9), 1));
       m.position.set(0, 0.0013 * (6 - Math.abs(i - 5.5)), 0);
       tail.add(m);
       tailFeathers.push({ m, k, i });
@@ -746,7 +840,7 @@
       hip.add(thigh);
       // Culotte de plumes qui retombe sur la cuisse
       for (const [a, L] of [[-0.6, 0.13], [0, 0.15], [0.6, 0.13]]) {
-        const f = featherMesh(MAT.covert, L, 0.07, 0.1);
+        const f = featherMesh(MAT.bodyCovert, L, 0.07, 0.1, 0.7);
         f.position.set(0.01, 0.01, Math.sin(a) * 0.035);
         f.rotation.order = 'ZYX';
         f.rotation.set(Math.PI / 2 + a * 0.6, 0, Math.PI / 2 - 0.15);
@@ -1133,6 +1227,7 @@
       passT: 0, startle: 0, blinkT: 0, nextBlink: 2, stretch: 0, nextStretch: 6,
       headYaw: 0, headPitch: 0, beak: 0, visible: true, burstPos: new V3(), pillar: false,
       tailSw: { x: 0, vx: 0, y: 0, vy: 0, z: 0, vz: 0 }, prevVy: 0, prevPitch: 0.8,
+      air: 0, wingBend: 0, prevFlap: 0, crestSw: { p: 0, v: 0 }, prevHeadPitch: 0, prevHeadYaw: 0,
     };
     const fxList = [];
 
@@ -1641,20 +1736,35 @@
         w.elbow.rotation.y = elbowA;
         w.wrist.rotation.y = wristA;
         const ext = clamp(st.ext * (1 - fold) * (1 - 0.35 * up), 0, 1);
-        for (const f of w.feathers) f.m.rotation.y = lerp(f.fold, f.ext, ext);
+        // chaque rémige bouge un peu à son rythme dans le vent (rien quand l'aile est repliée)
+        const jit = 0.02 * (1 - fold) * st.air;
+        for (const f of w.feathers) f.m.rotation.y = lerp(f.fold, f.ext, ext) + jit * Math.sin(time * 4.7 + f.j * 1.9 + w.root.userData.side);
+      }
+      // Plumes souples (voir softFeathers) : flexion des ailes selon leur vitesse, frémissement dans l'air
+      const speed = st.vel.length() / S, air = st.air;
+      {
+        const open = 1 - fold, flying = st.state !== 'perch' && st.state !== 'dead';
+        const fl = open * (flying ? 0.012 + 0.03 * air : 0.003), rp = open * (flying ? 0.15 + 0.6 * air : 0.04);
+        for (const u of [SOFT.primary, SOFT.secondary, SOFT.covert]) {
+          u.time.value = time; u.bend.value = st.wingBend; u.flutter.value = fl; u.ripple.value = rp;
+        }
+        const b = SOFT.body;
+        b.time.value = time; b.bend.value = 0.03 * Math.sin(time * 2.3) * (flying ? 0 : 1);
+        b.flutter.value = flying ? 0.01 + 0.025 * air : 0.004; b.ripple.value = flying ? 0.1 + 0.4 * air : 0.03;
+        const c = SOFT.crest;
+        c.time.value = time; c.bend.value = st.crestSw.p; c.flutter.value = 0.008 + 0.03 * air; c.ripple.value = 0.1 + 0.5 * air;
+        const t = SOFT.tail;
+        t.time.value = time; t.bend.value = clamp(0.07 * st.tailSw.vz, -0.35, 0.35);
+        t.flutter.value = flying ? 0.02 + 0.05 * air : 0.01; t.ripple.value = flying ? 0.1 + 0.5 * air : 0.03;
       }
       // Queue : l'éventail suit l'oiseau avec du retard (ressorts de tailDynamics), chaque rectrice
       // frémit à son rythme ; les longues plumes ont ici leur forme au repos, la simulation fait le reste.
-      const speed = st.vel.length() / S, air = Math.min(1, speed / 3);
       const sw = st.tailSw;
       tail.rotation.set(sw.x, sw.y, lerp(0.04, 0.12, st.legs) + sw.z);
       for (const f of tailFeathers) {
         f.m.rotation.y = f.k * 0.32 * st.tailSpread + 0.015 * air * Math.sin(time * 4.1 + f.i * 2.3);
         f.m.rotation.x = 0.06 * air * Math.sin(time * 6.3 + f.i * 1.7);
       }
-      tailU.time.value = time;
-      tailU.bend.value = clamp(0.07 * sw.vz, -0.35, 0.35);
-      tailU.flutter.value = st.state === 'perch' ? 0.01 : 0.02 + 0.05 * air;
       const droop = 0.03 + 0.05 * (1 - air);
       for (const p of plumes) {
         p.segs.forEach((g, i) => {
@@ -1698,6 +1808,25 @@
         sw[va] += (k * (t - sw[a]) - c * sw[va]) * dt;
         sw[a] = clamp(sw[a] + sw[va] * dt, -0.7, 0.7);
       }
+    }
+
+    // Rémiges : à la descente de l'aile, l'air relève leurs pointes, à la remontée il les abaisse ;
+    // en plané, elles se recourbent vers le haut. Aigrette : elle fouette quand la tête bouge.
+    function featherDynamics(dt) {
+      st.air = ease(st.air, Math.min(1, st.vel.length() / (3 * S)), dt, 6);
+      if (dt <= 0) return;
+      const flapVel = (st.flap - st.prevFlap) / dt;
+      st.prevFlap = st.flap;
+      const open = 1 - st.fold;
+      const target = open * (clamp(-0.018 * flapVel, -0.32, 0.32) + 0.1 * st.glide + (st.state === 'pass' ? 0.06 : 0));
+      st.wingBend += (target - st.wingBend) * Math.min(1, dt * 16);
+      const hp = (st.headPitch - st.prevHeadPitch) / dt, hy = (st.headYaw - st.prevHeadYaw) / dt;
+      st.prevHeadPitch = st.headPitch;
+      st.prevHeadYaw = st.headYaw;
+      const cs = st.crestSw, k = 90, c = 2 * 0.2 * Math.sqrt(k);
+      const ct = clamp(0.05 * hp + 0.04 * hy - (st.vel.y - st.prevVy) / (60 * S), -0.35, 0.35) - 0.06 * st.air;
+      cs.v += (k * (ct - cs.p) - c * cs.v) * dt;
+      cs.p = clamp(cs.p + cs.v * dt, -0.4, 0.4);
     }
 
     const tmpQ = new THREE.Quaternion(), tmpA = new V3(), tmpB = new V3(), tmpW = new V3();
@@ -1802,6 +1931,7 @@
         if (st.timer < 0.45 && !st.pillar) { st.pillar = true; fxList.push({ k: 'column', life: 0, max: 0.6 }); }
         if (st.timer <= 0) reborn();
       }
+      featherDynamics(dt);
       tailDynamics(dt);
       applyPose();
       updatePlumes(dt);
