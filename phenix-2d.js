@@ -1156,6 +1156,15 @@
     ];
     sh.push({ clip: head, parts: headParts });
     sh.push({ p: head, w: INK_W });
+    // M gravé sur le front : creux sombre incrusté d'or
+    const mark = new Path2D();
+    mark.moveTo(-0.022, -0.247);
+    mark.lineTo(-0.017, -0.285);
+    mark.lineTo(0, -0.262);
+    mark.lineTo(0.017, -0.285);
+    mark.lineTo(0.022, -0.247);
+    sh.push({ p: mark, w: 0.014, c: '#3a0806' });
+    sh.push({ p: mark, w: 0.006, c: '#ffd25a' });
     for (const s of [-1, 1]) {
       if (bird.blinkT <= 0) {
         const eye = new Path2D();

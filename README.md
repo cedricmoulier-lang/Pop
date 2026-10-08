@@ -36,7 +36,7 @@ Les valeurs sont modifiables dans le tableau `CUTS` et l'objet `MEAL` en tête d
 
 ## Phénix qui se promène sur la page
 
-`phenix.js` est une mascotte en 3D : un phénix de feu modélisé avec three.js, qui se promène sur n'importe quelle page HTML. Placez `phenix.js` et `phenix-2d.js` à côté de la page et ajoutez avant `</body>` :
+`phenix.js` est une mascotte en 3D : un phénix de feu modélisé avec three.js, un M gravé d'or sur le front, qui se promène sur n'importe quelle page HTML. Placez `phenix.js` et `phenix-2d.js` à côté de la page et ajoutez avant `</body>` :
 
 ```html
 <script src="phenix.js" defer></script>
@@ -47,7 +47,7 @@ Le script charge three.js 0.170 (environ 170 Ko compressés) depuis jsDelivr, ou
 - Modèle 3D : corps et cou d'un seul tenant, tête avec bec crochu, yeux et arcades ; ailes articulées à l'épaule, au coude et au poignet, avec une quarantaine de plumes chacune (rémiges, couvertures) ; queue de 12 rectrices et 3 longues plumes souples ; aigrette ; pattes et serres. Chaque plume a sa texture (rachis, barbes, fentes) et capte la lumière.
 - Vol : séries de battements (aile repliée à la remontée, rémiges écartées à la descente) et courts planés. Pour changer de direction, il pivote dans la profondeur en s'inclinant, le plus souvent en faisant face au spectateur.
 - Il se pose de trois quarts sur les titres, images, boutons et éléments marqués `data-phenix-perchoir`, ailes repliées contre les flancs, et reste dessus quand la page défile ; il suit le curseur du regard et étire parfois les ailes.
-- Au centre de l'écran, il vole sur place, ou il traverse l'écran : il prend un peu de recul dans la profondeur, fait demi-tour, revient droit sur le spectateur comme un avion, ailes tendues, pendant que le feu gagne les bords de l'écran. À l'impact : flash, onde de choc et mur de flammes, puis l'écran se consume depuis le centre (un trou aux bords calcinés qui s'élargit) avant qu'il revienne par un bord.
+- Au centre de l'écran, il vole sur place, ou il traverse l'écran : il prend un peu de recul dans la profondeur, fait demi-tour, revient droit sur le spectateur comme un avion, ailes tendues. À l'impact : flash, secousse, onde de choc et anneau de feu qui balaie l'écran en un instant, puis il revient par un bord.
 - Des flammes s'échappent de son plumage : chaque particule dépose une densité dans une image, qu'un shader transforme en feu (bruit fractal qui monte, langues déchirées, cœur jaune) ; le curseur l'effraie ; un clic sur lui le fait s'embraser et renaître.
 - Réglages : `data-taille` (pixels) et `data-perchoirs` (sélecteur CSS) sur la balise `<script>`.
 - API : `Phenix.traverser()`, `auCentre()`, `renaitre()`, `pause()`, `reprendre()`, `masquer()`, `afficher()`, `etat()`. Les appels faits pendant le chargement sont rejoués ensuite.

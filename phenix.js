@@ -548,6 +548,53 @@
       brow.rotation.set(0, 0.28 * s, -0.22);
       head.add(brow);
     }
+    // M gravé sur le front : une incision sombre, incrustée d'or en fusion. C'est un décalque
+    // qui épouse le crâne (une portion de la même sphère, à peine plus grande).
+    const mTex = canvasTex(256, 256, (g) => {
+      const M = new Path2D('M 46 222 L 62 46 L 128 156 L 194 46 L 210 222');
+      g.lineJoin = 'miter';
+      g.miterLimit = 3;
+      g.lineCap = 'butt';
+      g.strokeStyle = 'rgba(255,214,150,0.55)'; // arête éclairée
+      g.lineWidth = 42;
+      g.translate(3, 4); g.stroke(M); g.translate(-3, -4);
+      g.strokeStyle = 'rgba(52,6,4,0.95)'; // creux de la gravure
+      g.lineWidth = 40;
+      g.stroke(M);
+      const gold = g.createLinearGradient(0, 40, 0, 225);
+      gold.addColorStop(0, '#fff3c4');
+      gold.addColorStop(0.5, '#ffc94a');
+      gold.addColorStop(1, '#ff9a1e');
+      g.strokeStyle = gold; // incrustation
+      g.lineWidth = 17;
+      g.stroke(M);
+    });
+    MAT.mark = new THREE.MeshStandardMaterial({
+      map: mTex, emissiveMap: mTex, emissive: 0xffffff, emissiveIntensity: 1, roughness: 0.3, metalness: 0.2,
+      transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    });
+    {
+      const R = new V3(0.108, 0.072, 0.07), c = new V3(0.64, 0.77, 0).normalize(), up = new V3(-c.y, c.x, 0), side = new V3(0, 0, 1);
+      const G = 10, pos = [], uv = [], idx = [], d = new V3();
+      for (let j = 0; j <= G; j++) {
+        for (let i = 0; i <= G; i++) {
+          const a = i / G * 2 - 1, b = j / G * 2 - 1;
+          d.copy(c).addScaledVector(side, a * 0.62).addScaledVector(up, b * 0.5).normalize().multiply(R).multiplyScalar(1.012);
+          pos.push(d.x, d.y, d.z);
+          uv.push(i / G, j / G);
+          if (i < G && j < G) { const q = j * (G + 1) + i; idx.push(q, q + G + 1, q + 1, q + 1, q + G + 1, q + G + 2); } // face tournée vers l'extérieur
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      const mark = new THREE.Mesh(geo, MAT.mark);
+      mark.renderOrder = 1;
+      head.add(mark);
+    }
+
     // Aigrette : longues plumes couchées vers l'arrière, comme une crinière qui flotte
     const crest = [];
     for (let i = 0; i < 9; i++) {
@@ -906,7 +953,7 @@
     const flMesh = new THREE.Mesh(flGeo, flMat);
     flMesh.frustumCulled = false;
     densScene.add(flMesh);
-    let fireBoost = 1, fireUnit = 40, preHeat = 0, shake = 0;
+    let fireBoost = 1, fireUnit = 40, shake = 0;
     function updateAttachedFlames() {
       if (!st.visible || reduce.matches) { flGeo.instanceCount = 0; return; }
       const list = flameAnchors;
@@ -978,55 +1025,41 @@
       vertexShader: FULL_VS,
       fragmentShader: 'uniform sampler2D map; varying vec2 vUv; void main() { gl_FragColor = texture2D(map, vUv); }',
     }, BLEND, { depthTest: false }));
-    // Traversée de l'écran : des flammes lèchent les bords à son approche ; à l'impact, flash, onde de choc
-    // et mur de feu ; puis l'écran se consume depuis le centre — un trou aux bords calcinés et incandescents.
+    // Traversée de l'écran : flash, onde de choc, puis un anneau de feu part du point d'impact et balaie
+    // l'écran en un instant, laissant derrière lui un liseré de braises qui s'éteint. La page reste lisible.
     const impactMat = new THREE.ShaderMaterial({
-      uniforms: { time: { value: 0 }, k: { value: -1 }, pre: { value: 0 }, aspect: { value: 1 }, shake: { value: new THREE.Vector2() } },
+      uniforms: { time: { value: 0 }, k: { value: -1 }, aspect: { value: 1 }, shake: { value: new THREE.Vector2() } },
       vertexShader: FULL_VS,
       fragmentShader: FIRE_GLSL + `
-        uniform float time; uniform float k; uniform float pre; uniform float aspect; uniform vec2 shake; varying vec2 vUv;
+        uniform float time; uniform float k; uniform float aspect; uniform vec2 shake; varying vec2 vUv;
         vec4 over(vec4 top, vec4 under) { return top + under * (1.0 - top.a); }
-        // Feu « réel » à partir d'une intensité : langues étirées, translucides au bord, jaunes au cœur
-        vec4 burn(float I) {
-          float a = smoothstep(0.0, 0.4, I) * 0.95;
-          return vec4(fireColor(clamp(I * 1.05, 0.0, 1.0)) * a, a);
-        }
         void main() {
           vec2 p = vec2((vUv.x - 0.5) * aspect, vUv.y - 0.5) + shake;
           vec2 qa = vec2(p.x * 7.0, p.y * 2.6);
           float n1 = fbm(qa + vec2(0.0, -time * 1.6));
           float n2 = fbm(qa * 2.1 + vec2(4.0, -time * 3.6));
           float tn = n2 * 0.6 + n1 * 0.4;
-          if (k < 0.0) {
-            // Avant l'impact : le feu monte du bas de l'écran et lèche les côtés
-            float e = min(min(vUv.x, 1.0 - vUv.x) * aspect * 1.6, vUv.y);
-            float I = pre * pre * (0.62 - e * 2.6) * (0.35 + 1.3 * tn) - 0.08;
-            vec4 c = burn(I);
-            if (c.a < 0.003) discard;
-            gl_FragColor = c;
-            return;
-          }
           float r = length(p);
           float n = fbm(p * 2.4 + vec2(0.0, -time * 1.2));
-          float rr = r + (n - 0.5) * 0.5 + (n2 - 0.5) * 0.12;
-          float Ro = 2.2 * (1.0 - exp(-k * 7.0));                // le mur de feu jaillit du centre
-          float Ri = 2.6 * pow(clamp((k - 0.45) / 1.6, 0.0, 1.0), 1.2) - 0.25; // puis le trou s'élargit
-          float front = max(0.0, rr - Ri);
-          float wall = smoothstep(Ro, Ro - 0.35, rr) * smoothstep(0.0, 0.05, front);
-          float I = wall * ((0.3 + 1.1 * tn) * (1.0 + 0.4 * exp(-k * 4.0)) + 0.45 * exp(-front * 7.0) * step(0.0, Ri))
-                  - 0.14 - 0.25 * smoothstep(1.4, 2.1, k);
-          vec4 c = burn(I);
-          float burning = smoothstep(-0.1, 0.05, Ri) * (1.0 - smoothstep(1.8, 2.15, k));
-          // Liseré de braises au bord du trou, et bord calciné juste à l'intérieur
-          float e = burning * exp(-pow((rr - Ri) / 0.016, 2.0)) * (0.75 + 0.5 * n2);
-          float charA = 0.75 * burning * smoothstep(Ri - 0.06, Ri - 0.005, rr) * step(rr, Ri);
-          c = over(vec4(vec3(0.12, 0.04, 0.02) * charA, charA), c);
-          c = over(vec4(vec3(1.0, 0.72, 0.25) * min(1.0, e), min(1.0, e)), c);
+          float rr = r + (n - 0.5) * 0.4 + (n2 - 0.5) * 0.12;
+          float Ro = 2.0 * (1.0 - exp(-k * 2.6));       // bord extérieur de l'anneau
+          float Ri = Ro - 0.08 - 0.3 * exp(-k * 3.0);    // bord intérieur : la page réapparaît derrière
+          float fade = 1.0 - smoothstep(0.35, 0.75, k);
+          float ringF = smoothstep(Ro, Ro - 0.12, rr) * smoothstep(Ri - 0.04, Ri + 0.06, rr);
+          float I = ringF * (0.35 + 1.1 * tn) * fade - 0.12;
+          float a = smoothstep(0.0, 0.4, I) * 0.92;
+          vec4 c = vec4(fireColor(clamp(I * 1.05, 0.0, 1.0)) * a, a);
+          // Liseré de braises et trace roussie, juste derrière l'anneau
+          float trail = smoothstep(0.03, 0.08, k) * fade;
+          float charA = 0.4 * trail * smoothstep(Ri - 0.05, Ri - 0.005, rr) * step(rr, Ri);
+          c = over(c, vec4(vec3(0.16, 0.05, 0.02) * charA, charA));
+          float e = min(1.0, trail * exp(-pow((rr - Ri) / 0.013, 2.0)) * (0.6 + 0.5 * n2));
+          c = over(vec4(vec3(1.0, 0.74, 0.28) * e, e), c);
           // Onde de choc et flash
           float R = k * 3.6;
-          float ring = 0.8 * exp(-pow((r - R) / (0.02 + 0.06 * k), 2.0)) * (1.0 - smoothstep(0.0, 0.5, k));
+          float ring = 0.75 * exp(-pow((r - R) / (0.02 + 0.06 * k), 2.0)) * (1.0 - smoothstep(0.0, 0.45, k));
           c = over(vec4(vec3(1.0, 0.9, 0.66) * ring, ring), c);
-          float fa = 0.9 * exp(-k * 16.0) * (1.0 - 0.5 * smoothstep(0.0, 1.0, r));
+          float fa = 0.8 * exp(-k * 18.0) * (1.0 - 0.5 * smoothstep(0.0, 1.0, r));
           c = over(vec4(vec3(1.0, 0.96, 0.84) * fa, fa), c);
           if (c.a < 0.003) discard;
           gl_FragColor = c;
@@ -1457,8 +1490,7 @@
       } else {
         // Comme un avion : ailes tendues à plat, sans battre, il plane droit sur la caméra
         const u = (t - P_TURN) / P_APPROACH;
-        fireBoost = 1 + 1.2 * u; // le feu enfle à mesure qu'il approche
-        preHeat = clamp((u - 0.5) / 0.5, 0, 1); // la chaleur gagne les bords de l'écran
+        fireBoost = 1 - 0.45 * Math.min(1, u); // ses flammes se tassent : c'est l'oiseau qui remplit l'écran
         shake = Math.max(shake, 5 * clamp((u - 0.8) / 0.2, 0, 1));
         st.yawTarget = 1.5 * Math.PI;
         turn(dt, 3);
@@ -1488,17 +1520,17 @@
     function passThrough() {
       fireBoost = 1;
       impactT = 0;
-      const n = 260 * quality;
+      const n = 120 * quality;
       for (let i = 0; i < n; i++) {
-        const a = Math.random() * TAU, v = rand(0.8, 2.2) * Math.max(W, H), r0 = rand(0, 0.25) * Math.min(W, H);
-        spawn(fire, i % 3 ? FLAME : SPARK, Math.cos(a) * r0, Math.sin(a) * r0, D * 0.3, Math.cos(a) * v, Math.sin(a) * v, 0,
-          rand(0.35, 0.75), i % 3 ? S * rand(0.5, 1.1) : S * rand(0.05, 0.1), rand(0.85, 1));
+        const a = Math.random() * TAU, v = rand(0.8, 2.2) * Math.max(W, H), r0 = rand(0, 0.2) * Math.min(W, H);
+        const flame = i % 4 === 0;
+        spawn(fire, flame ? FLAME : SPARK, Math.cos(a) * r0, Math.sin(a) * r0, D * 0.3, Math.cos(a) * v, Math.sin(a) * v, 0,
+          rand(0.3, 0.55), flame ? S * rand(0.3, 0.55) : S * rand(0.05, 0.1), rand(0.85, 1));
       }
       addFlash(new V3(0, 0, D * 0.5), Math.max(W, H) * 0.6, 0.55);
-      shake = 28;
-      preHeat = 0;
+      shake = 20;
       st.state = 'away';
-      st.timer = 1.5;
+      st.timer = 1.2;
       st.visible = false;
     }
     function reenter() {
@@ -1800,9 +1832,9 @@
       updateAttachedFlames();
       if (impactT >= 0) {
         impactT += dt;
-        if (impactT > 2.2) impactT = -1;
+        if (impactT > 1) impactT = -1;
       }
-      if (st.state !== 'pass') { fireBoost = ease(fireBoost, 1, dt, 3); preHeat = 0; }
+      if (st.state !== 'pass') fireBoost = ease(fireBoost, 1, dt, 3);
       shake *= Math.exp(-5 * dt);
       if (shake < 0.2) shake = 0;
       // Taille des langues de feu : suit la perspective de l'oiseau
@@ -1907,9 +1939,8 @@
       }
       renderer.render(scene, camera);
       // 4. Traversée de l'écran
-      if (impactT >= 0 || preHeat > 0.01) {
+      if (impactT >= 0) {
         impactMat.uniforms.k.value = impactT;
-        impactMat.uniforms.pre.value = preHeat;
         impactMat.uniforms.time.value = time;
         impactMat.uniforms.aspect.value = W / H;
         impactMat.uniforms.shake.value.set(ox / H, oy / H);
