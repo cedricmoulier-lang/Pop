@@ -107,209 +107,174 @@
       return t;
     }
 
-    // Dégradé de feu le long d'une plume : bout rouge sombre, base dorée.
-    function fireGradient(g, W) {
-      const grad = g.createLinearGradient(0, 0, W, 0);
-      grad.addColorStop(0, '#7a0f1f');
-      grad.addColorStop(0.13, '#c2281c');
-      grad.addColorStop(0.36, '#f0561a');
-      grad.addColorStop(0.66, '#ffa02a');
-      grad.addColorStop(0.9, '#ffd36e');
-      grad.addColorStop(1, '#ffe6a4');
-      return grad;
+    /* ---------- Plumes : textures calculées pixel par pixel ---------- */
+    // Pas de traits dessinés : des barbes fines et irrégulières, un bord effiloché, des barbes qui
+    // s'écartent par endroits, du duvet à la base, et une carte de relief pour que la lumière
+    // accroche les barbes comme sur une vraie plume.
+
+    // Bruit de valeur lissé (irrégularités, marbrures, duvet)
+    function valueNoise() {
+      const P = new Float32Array(1024);
+      for (let i = 0; i < 1024; i++) P[i] = Math.random();
+      const h = (x, y) => P[((x * 73856093) ^ (y * 19349663)) & 1023];
+      return (x, y) => {
+        const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+        const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+        const a = h(xi, yi), b = h(xi + 1, yi), c = h(xi, yi + 1), d = h(xi + 1, yi + 1);
+        return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+      };
+    }
+    // Couleur interpolée le long d'une suite de paliers [t, [r, v, b]]
+    const ramp = (stops) => (t) => {
+      let j = 1;
+      while (j < stops.length - 1 && stops[j][0] < t) j++;
+      const [t0, c0] = stops[j - 1], [t1, c1] = stops[j], f = clamp((t - t0) / (t1 - t0), 0, 1);
+      return [lerp(c0[0], c1[0], f), lerp(c0[1], c1[1], f), lerp(c0[2], c1[2], f)];
+    };
+    // Couleur + relief. px(x, y, o) remplit o = [r, v, b, a, nx, ny, nz] ; y = 0 en haut de l'image.
+    // Les données vont directement à la carte graphique (pas de canvas : les pixels transparents gardent
+    // leur couleur, sinon un liseré sombre apparaît autour de chaque plume).
+    function texPair(W, H, px) {
+      const col = new Uint8Array(W * H * 4), nor = new Uint8Array(W * H * 4), o = new Float32Array(7);
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          o[4] = 0; o[5] = 0; o[6] = 1;
+          px(x, y, o);
+          const i = ((H - 1 - y) * W + x) * 4; // ligne retournée : le haut de l'image en v = 1
+          col[i] = clamp(o[0], 0, 255); col[i + 1] = clamp(o[1], 0, 255); col[i + 2] = clamp(o[2], 0, 255); col[i + 3] = clamp(o[3], 0, 255);
+          nor[i] = (o[4] * 0.5 + 0.5) * 255; nor[i + 1] = (-o[5] * 0.5 + 0.5) * 255; nor[i + 2] = (o[6] * 0.5 + 0.5) * 255; nor[i + 3] = 255;
+        }
+      }
+      const mk = (data, srgb) => {
+        const t = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
+        t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+        t.magFilter = THREE.LinearFilter;
+        t.minFilter = THREE.LinearMipmapLinearFilter;
+        t.generateMipmaps = true;
+        t.anisotropy = 8;
+        t.needsUpdate = true;
+        return t;
+      };
+      return { map: mk(col, true), normalMap: mk(nor, false) };
     }
 
-    // Plume vue de dessus, le bout à gauche (u = 0) et la base à droite (u = 1).
-    function featherTex(kind) {
-      const P = {
-        primary: { top: 0.17, bot: 0.45, tip: 0.12, round: 0.55 },
-        secondary: { top: 0.3, bot: 0.45, tip: 0.18, round: 0.8 },
-        covert: { top: 0.42, bot: 0.42, tip: 0.35, round: 0.9 },
-        tail: { top: 0.42, bot: 0.42, tip: 0.14, round: 0.7 },
-        crest: { top: 0.2, bot: 0.2, tip: 0.08, round: 0.3 },
-        contour: { top: 0.44, bot: 0.44, tip: 0.32, round: 0.85, soft: true }, // plumes du corps : douces, sans liseré
-      }[kind];
-      return canvasTex(512, 128, (g, W, H) => {
-        const cy = H / 2;
-        const prof = (t) => {
-          const tipK = Math.min(1, t / P.tip) ** P.round;
-          const baseK = t > 0.84 ? 1 - ((t - 0.84) / 0.16) * 0.6 : 1;
-          return tipK * baseK;
-        };
-        const vane = new Path2D();
-        const N = 64;
-        for (let i = 0; i <= N; i++) {
-          const t = i / N, x = 3 + t * (W - 6), y = cy - P.top * H * prof(t);
-          if (i) vane.lineTo(x, y); else vane.moveTo(x, y);
-        }
-        for (let i = N; i >= 0; i--) {
-          const t = i / N;
-          vane.lineTo(3 + t * (W - 6), cy + P.bot * H * prof(t));
-        }
-        vane.closePath();
-        g.save();
-        g.clip(vane);
-        if (P.soft) {
-          const sg = g.createLinearGradient(0, 0, W, 0);
-          sg.addColorStop(0, '#ffc55e');
-          sg.addColorStop(0.45, '#ff9636');
-          sg.addColorStop(1, '#de5422');
-          g.fillStyle = sg;
+    // Plume vue de dessus, bout à gauche (u = 0), base à droite (u = 1).
+    // f.width(t) → [demi-largeur côté haut, côté bas] (fraction de la hauteur), f.color(t, s) → [r, v, b]
+    // (s : 0 au rachis, 1 au bord), f.spacing : écart des barbes (px), f.down : part duveteuse à la base,
+    // f.touch(t, dy, o) : retouche facultative (ocelle…).
+    function featherPair(W, H, f) {
+      const n = valueNoise(), cy = H / 2, sp = f.spacing || 2.6, sl = f.slant || 1.5, down = f.down ?? 0.16;
+      const rachis = ramp([[0, [190, 96, 60]], [0.5, [246, 206, 150]], [1, [255, 238, 205]]]);
+      return texPair(W, H, (x, y, o) => {
+        const t = x / (W - 1), dy = (y + 0.5 - cy) / H, top = dy < 0, ad = Math.abs(dy);
+        const wv = f.width(t), half = Math.max(1e-3, top ? wv[0] : wv[1]);
+        const s = ad / half;
+        const b = x + ad * H * sl; // reste constant le long d'une barbe
+        const ph = (b + n(b * 0.04, ad * H * 0.05) * 7) / sp;
+        const barb = 0.5 + 0.5 * Math.cos(ph * TAU), slope = -Math.sin(ph * TAU) * Math.PI;
+        // bord effiloché qui suit la pointe des barbes, barbes qui s'écartent, duvet à la base
+        let a = 1 - smooth((s - 0.8 + (n(b * 0.07, 7.3) - 0.5) * 0.28 + (1 - barb) * 0.1) / 0.22);
+        const gap = smooth((n(b * 0.05 + 31, 1.7) - 0.7) / 0.1) * smooth((s - 0.3) / 0.3);
+        a *= 1 - gap * (1 - barb) * 0.95;
+        const fluff = down > 0 ? smooth((t - (1 - down)) / down) : 0;
+        a *= 1 - fluff * (0.35 + 0.6 * n(x * 0.25, y * 0.25));
+        const c = f.color(t, Math.min(1, s));
+        let k = (0.82 + 0.26 * barb) * (0.88 + 0.24 * n(x * 0.012, y * 0.04)) * (1 - 0.18 * s * s);
+        k = lerp(k, 1.06, fluff * 0.6);
+        o[0] = c[0] * k; o[1] = c[1] * k; o[2] = c[2] * k; o[3] = 255 * clamp(a, 0, 1);
+        const rw = (0.5 + 1.6 * t) / H; // demi-largeur de la tige
+        if (ad < rw && t > 0.015) {
+          const m = 1 - ad / rw, rc = rachis(t);
+          o[0] = lerp(o[0], rc[0], m * 0.85); o[1] = lerp(o[1], rc[1], m * 0.85); o[2] = lerp(o[2], rc[2], m * 0.85);
+          o[3] = 255;
+          o[5] = (top ? -0.5 : 0.5) * (1 - m);
+          o[6] = Math.sqrt(1 - o[5] * o[5]);
         } else {
-          g.fillStyle = fireGradient(g, W);
+          // relief : chaque barbe est un petit cylindre, et la vexille se creuse un peu vers le bord
+          const kx = 0.5 * slope, ky = 0.5 * slope * sl * (top ? -1 : 1) + (top ? -0.3 : 0.3) * s;
+          const L = Math.hypot(kx, ky, 1);
+          o[4] = -kx / L; o[5] = -ky / L; o[6] = 1 / L;
         }
-        g.fillRect(0, 0, W, H);
-        // Modelé : lumière sur un bord, ombre sur l'autre
-        const vg = g.createLinearGradient(0, 0, 0, H);
-        vg.addColorStop(0, 'rgba(255,240,205,0.28)');
-        vg.addColorStop(0.42, 'rgba(255,240,205,0)');
-        vg.addColorStop(0.58, 'rgba(90,10,15,0)');
-        vg.addColorStop(1, `rgba(90,10,15,${P.soft ? 0.16 : 0.42})`);
-        g.fillStyle = vg;
-        g.fillRect(0, 0, W, H);
-        // Barbes fines, alternativement claires et sombres
-        g.lineWidth = 1;
-        for (let x = 8; x < W - 12; x += 4) {
-          const len = H * 0.55;
-          g.strokeStyle = (x / 4) % 2 ? 'rgba(255,232,176,0.2)' : 'rgba(80,10,16,0.22)';
-          g.beginPath();
-          g.moveTo(x, cy);
-          g.lineTo(x - len * 0.55, cy - len);
-          g.moveTo(x, cy);
-          g.lineTo(x - len * 0.55, cy + len);
-          g.stroke();
-        }
-        g.restore();
-        if (P.soft) {
-          // Bords duveteux : la plume se fond dans ses voisines
-          g.globalCompositeOperation = 'destination-in';
-          g.filter = 'blur(5px)';
-          g.fill(vane);
-          g.filter = 'none';
-          g.globalCompositeOperation = 'source-over';
-          g.strokeStyle = 'rgba(255,240,200,0.35)';
-          g.lineWidth = 2;
-          g.beginPath();
-          g.moveTo(W * 0.2, cy);
-          g.lineTo(W, cy);
-          g.stroke();
-          return;
-        }
-        // Petites fentes dans la vexille, comme sur une vraie plume
-        g.save();
-        g.globalCompositeOperation = 'destination-out';
-        g.lineWidth = 2;
-        for (let i = 0; i < 9; i++) {
-          const x = rand(0.1, 0.8) * W, s = Math.random() < 0.5 ? -1 : 1;
-          g.beginPath();
-          g.moveTo(x, cy + s * H * 0.48);
-          g.lineTo(x + 14, cy + s * H * rand(0.22, 0.32));
-          g.stroke();
-        }
-        g.restore();
-        // Rachis et contour
-        const rg = g.createLinearGradient(0, 0, W, 0);
-        rg.addColorStop(0, 'rgba(255,236,190,0.25)');
-        rg.addColorStop(1, 'rgba(255,246,218,0.95)');
-        g.strokeStyle = rg;
-        g.lineWidth = 3;
-        g.beginPath();
-        g.moveTo(W * 0.05, cy - 2);
-        g.quadraticCurveTo(W * 0.5, cy - 4, W, cy);
-        g.stroke();
-        g.strokeStyle = 'rgba(84,8,16,0.5)';
-        g.lineWidth = 2;
-        g.stroke(vane);
+        if (f.touch) f.touch(t, dy, o, x, y);
       });
     }
-
-    // Longue plume de queue : tige nue, puis large vexille qui finit en flamme recourbée.
-    function plumeTex() {
-      return canvasTex(1024, 128, (g, W, H) => {
-        const cy = H / 2;
-        const w = (t) => { // t : 0 bout → 1 base
-          if (t > 0.55) return 0.05 + 0.04 * (1 - t);
-          const k = t / 0.55;
-          return 0.06 + 0.36 * Math.sin(Math.PI * Math.min(1, k * 1.15)) ** 0.8;
-        };
-        const vane = new Path2D();
-        const N = 90;
-        for (let i = 0; i <= N; i++) {
-          const t = i / N, x = 3 + t * (W - 6);
-          const curl = Math.sin(t * 20) * 4 * (1 - t);
-          if (i) vane.lineTo(x, cy - w(t) * H + curl); else vane.moveTo(x, cy - w(t) * H + curl);
-        }
-        for (let i = N; i >= 0; i--) {
-          const t = i / N;
-          vane.lineTo(3 + t * (W - 6), cy + w(t) * H + Math.sin(t * 17 + 1) * 4 * (1 - t));
-        }
-        vane.closePath();
-        g.save();
-        g.clip(vane);
-        g.fillStyle = fireGradient(g, W);
-        g.fillRect(0, 0, W, H);
-        // Ocelle de feu dans la vexille
-        const eye = g.createRadialGradient(W * 0.16, cy, 2, W * 0.16, cy, H * 0.42);
-        eye.addColorStop(0, 'rgba(255,245,200,0.95)');
-        eye.addColorStop(0.35, 'rgba(255,170,40,0.7)');
-        eye.addColorStop(0.7, 'rgba(160,20,24,0.55)');
-        eye.addColorStop(1, 'rgba(160,20,24,0)');
-        g.fillStyle = eye;
-        g.fillRect(0, 0, W, H);
-        g.lineWidth = 1;
-        for (let x = 6; x < W * 0.6; x += 4) {
-          g.strokeStyle = (x / 4) % 2 ? 'rgba(255,232,176,0.2)' : 'rgba(80,10,16,0.22)';
-          g.beginPath();
-          g.moveTo(x, cy);
-          g.lineTo(x - 26, cy - H * 0.5);
-          g.moveTo(x, cy);
-          g.lineTo(x - 26, cy + H * 0.5);
-          g.stroke();
-        }
-        g.restore();
-        g.strokeStyle = 'rgba(255,240,206,0.85)';
-        g.lineWidth = 3;
-        g.beginPath();
-        g.moveTo(W * 0.03, cy);
-        g.lineTo(W, cy);
-        g.stroke();
-        g.strokeStyle = 'rgba(84,8,16,0.5)';
-        g.lineWidth = 2;
-        g.stroke(vane);
-      });
+    const profile = (P) => (t) => {
+      const k = Math.min(1, t / P.tip) ** P.round * (t > 0.84 ? 1 - ((t - 0.84) / 0.16) * 0.6 : 1);
+      return [P.top * k, P.bot * k];
+    };
+    // Couleurs : bouts sombres, rouge profond, orange de braise, or pâle à la base
+    const PAL = {
+      primary: ramp([[0, [48, 11, 13]], [0.1, [92, 16, 18]], [0.26, [160, 30, 22]], [0.5, [218, 76, 26]], [0.75, [240, 144, 46]], [0.92, [248, 196, 108]], [1, [252, 224, 168]]]),
+      secondary: ramp([[0, [84, 16, 17]], [0.18, [158, 32, 22]], [0.45, [220, 86, 28]], [0.75, [242, 152, 52]], [1, [250, 218, 156]]]),
+      covert: ramp([[0, [168, 42, 24]], [0.3, [224, 98, 32]], [0.7, [244, 164, 62]], [1, [250, 216, 148]]]),
+      tail: ramp([[0, [54, 12, 14]], [0.12, [112, 20, 20]], [0.35, [188, 46, 24]], [0.65, [234, 116, 38]], [1, [248, 202, 118]]]),
+      crest: ramp([[0, [140, 24, 20]], [0.3, [214, 66, 26]], [0.7, [244, 156, 54]], [1, [250, 210, 136]]]),
+      contour: ramp([[0, [232, 124, 42]], [0.35, [208, 74, 28]], [0.75, [228, 124, 50]], [1, [246, 200, 140]]]),
+    };
+    const FEATHER = {
+      primary: { top: 0.17, bot: 0.45, tip: 0.12, round: 0.55, spacing: 2.4 },
+      secondary: { top: 0.3, bot: 0.45, tip: 0.18, round: 0.8, spacing: 2.6 },
+      covert: { top: 0.42, bot: 0.42, tip: 0.35, round: 0.9, spacing: 2.8, down: 0.22 },
+      tail: { top: 0.42, bot: 0.42, tip: 0.14, round: 0.7, spacing: 2.4 },
+      crest: { top: 0.2, bot: 0.2, tip: 0.08, round: 0.3, spacing: 2.2, down: 0.25 },
+      contour: { top: 0.44, bot: 0.44, tip: 0.32, round: 0.85, spacing: 3, slant: 1.1, down: 0.3 },
+    };
+    function realFeather(kind) {
+      const P = FEATHER[kind], col = PAL[kind];
+      return featherPair(512, 128, { width: profile(P), spacing: P.spacing, slant: P.slant, down: P.down ?? 0.12, color: (t, s) => {
+        const c = col(t); // le bord de la vexille un peu plus sombre
+        return [c[0] * (1 - 0.12 * s), c[1] * (1 - 0.16 * s), c[2] * (1 - 0.16 * s)];
+      } });
     }
 
-    // Plumage du corps : petites plumes en écailles, pointées vers la queue.
-    function bodyTex() {
-      const t = canvasTex(512, 512, (g, W, H) => {
-        const grad = g.createLinearGradient(0, 0, 0, H);
-        grad.addColorStop(0, '#ffd88a');
-        grad.addColorStop(0.45, '#ff9c2c');
-        grad.addColorStop(1, '#d8401c');
-        g.fillStyle = grad;
-        g.fillRect(0, 0, W, H);
-        const rows = 16, cols = 16, cw = W / cols, rh = H / rows;
-        for (let r = 0; r < rows; r++) {
-          for (let c = -1; c <= cols; c++) {
-            const x = (c + (r % 2) * 0.5) * cw, y = r * rh;
-            const p = new Path2D();
-            p.moveTo(x - cw * 0.55, y);
-            p.quadraticCurveTo(x - cw * 0.55, y + rh * 1.5, x, y + rh * 1.7);
-            p.quadraticCurveTo(x + cw * 0.55, y + rh * 1.5, x + cw * 0.55, y);
-            const fg = g.createLinearGradient(0, y, 0, y + rh * 1.7);
-            fg.addColorStop(0, 'rgba(255,236,170,0.0)');
-            fg.addColorStop(0.6, 'rgba(255,236,170,0.22)');
-            fg.addColorStop(1, 'rgba(120,20,16,0.32)');
-            g.fillStyle = fg;
-            g.fill(p);
-            g.strokeStyle = 'rgba(96,14,16,0.35)';
-            g.lineWidth = 1.2;
-            g.stroke(p);
+    // Longue plume de queue : tige nue, puis large vexille qui finit en flamme, avec un ocelle
+    function realPlume() {
+      const W = 1024, H = 128, cy = H / 2, ex = W * 0.16, er = H * 0.42;
+      const col = ramp([[0, [70, 12, 14]], [0.12, [168, 34, 22]], [0.35, [228, 92, 28]], [0.66, [246, 160, 44]], [1, [252, 222, 160]]]);
+      const eye = ramp([[0, [255, 240, 196]], [0.3, [250, 176, 52]], [0.62, [196, 44, 22]], [1, [168, 34, 22]]]);
+      const w = (t) => {
+        if (t > 0.55) return 0.05 + 0.04 * (1 - t);
+        return 0.06 + 0.36 * Math.sin(Math.PI * Math.min(1, (t / 0.55) * 1.15)) ** 0.8;
+      };
+      return featherPair(W, H, { width: (t) => [w(t), w(t)], spacing: 2.8, slant: 1.8, down: 0, color: col,
+        touch: (t, dy, o, x, y) => {
+          const d = Math.hypot((x - ex) / er, (y - cy) / er);
+          if (d < 1) {
+            const c = eye(d), m = 1 - smooth((d - 0.75) / 0.25);
+            o[0] = lerp(o[0], c[0] * (o[0] / 255 * 0.3 + 0.75), m); o[1] = lerp(o[1], c[1] * 0.92, m); o[2] = lerp(o[2], c[2] * 0.92, m);
           }
-        }
+        } });
+    }
+
+    // Pattes : rangées d'écailles bombées (scutelles), sillons sombres entre elles
+    function scutesPair() {
+      const n = valueNoise(), W = 64, H = 128, rows = 22, cols = 6;
+      return texPair(W, H, (x, y, o) => {
+        const v = y / H * rows, row = Math.floor(v), u = x / W * cols + (row % 2) * 0.5;
+        const fu = u - Math.floor(u) - 0.5, fv = v - row - 0.5;
+        const d = Math.max(Math.abs(fu) * 1.1, Math.abs(fv) * 1.25);
+        const bump = 1 - smooth((d - 0.3) / 0.2);
+        const k = (0.62 + 0.42 * bump) * (0.9 + 0.2 * n(x * 0.1, y * 0.1));
+        o[0] = 232 * k; o[1] = 158 * k; o[2] = 62 * k; o[3] = 255;
+        const gx = -fu * 2.4 * (1 - bump) * bump * 4, gy = -fv * 2.4 * (1 - bump) * bump * 4;
+        const L = Math.hypot(gx, gy, 1);
+        o[4] = gx / L; o[5] = gy / L; o[6] = 1 / L;
       });
-      t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      return t;
+    }
+
+    // Duvet ras du corps et de la tête : de fines mèches couchées, marbrées
+    function velvetPair(W, H, color, dir) {
+      const n = valueNoise(), m = valueNoise();
+      return texPair(W, H, (x, y, o) => {
+        const u = dir ? y : x, v = dir ? x : y; // les mèches suivent u
+        const s1 = n(u * 0.05, v * 0.55), s2 = m(u * 0.11 + 9, v * 1.1);
+        const streak = s1 * 0.65 + s2 * 0.35;
+        const c = color(y / (H - 1));
+        const k = (0.8 + 0.34 * streak) * (0.92 + 0.16 * m(x * 0.02, y * 0.02));
+        o[0] = c[0] * k; o[1] = c[1] * k; o[2] = c[2] * k; o[3] = 255;
+        const g = (n(u * 0.05, (v + 1) * 0.55) - s1) * 2.2;
+        o[dir ? 5 : 4] = 0; o[dir ? 4 : 5] = g; o[6] = Math.sqrt(Math.max(0.2, 1 - g * g));
+      });
     }
 
     function spriteTex(draw, size) {
@@ -333,30 +298,36 @@
     }, 128);
 
     const TEX = {
-      primary: featherTex('primary'),
-      secondary: featherTex('secondary'),
-      covert: featherTex('covert'),
-      tail: featherTex('tail'),
-      crest: featherTex('crest'),
-      contour: featherTex('contour'),
-      plume: plumeTex(),
-      body: bodyTex(),
+      primary: realFeather('primary'),
+      secondary: realFeather('secondary'),
+      covert: realFeather('covert'),
+      tail: realFeather('tail'),
+      crest: realFeather('crest'),
+      contour: realFeather('contour'),
+      plume: realPlume(),
+      body: velvetPair(256, 256, ramp([[0, [246, 178, 92]], [0.5, [236, 132, 50]], [1, [214, 84, 34]]]), true),
+      scales: scutesPair(),
     };
-    TEX.body.repeat.set(3, 2);
-    const featherMat = (tex, glow) => new THREE.MeshStandardMaterial({
-      map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: glow,
-      alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.62, metalness: 0,
+    for (const t of [TEX.body.map, TEX.body.normalMap]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 2); }
+    // Plumes : relief des barbes, reflet velouté sous la lumière rasante (sheen), lueur interne discrète,
+    // bords adoucis par l'anticrénelage (alphaToCoverage), teinte propre à chaque plume (couleurs de sommets)
+    const featherMat = (tex, glow, tint = true) => new THREE.MeshPhysicalMaterial({
+      map: tex.map, normalMap: tex.normalMap, normalScale: new THREE.Vector2(0.9, 0.9),
+      emissiveMap: tex.map, emissive: 0xffffff, emissiveIntensity: glow,
+      sheen: 0.45, sheenRoughness: 0.42, sheenColor: new THREE.Color(0xffb870),
+      roughness: 0.55, metalness: 0, vertexColors: tint,
+      alphaTest: 0.25, alphaToCoverage: true, side: THREE.DoubleSide,
     });
     const MAT = {
-      primary: featherMat(TEX.primary, 0.42),
-      secondary: featherMat(TEX.secondary, 0.45),
-      covert: featherMat(TEX.covert, 0.5),
-      bodyCovert: Object.assign(featherMat(TEX.contour, 0.46), { alphaTest: 0.2, alphaToCoverage: true }),
-      tail: featherMat(TEX.tail, 0.42),
-      crest: featherMat(TEX.crest, 0.5),
-      plume: featherMat(TEX.plume, 0.48),
-      body: new THREE.MeshStandardMaterial({ map: TEX.body, emissiveMap: TEX.body, emissive: 0xffffff, emissiveIntensity: 0.42, roughness: 0.75 }),
-      leg: new THREE.MeshStandardMaterial({ color: 0xe6a03c, roughness: 0.45, emissive: 0x5a2208, emissiveIntensity: 0.4 }),
+      primary: featherMat(TEX.primary, 0.2),
+      secondary: featherMat(TEX.secondary, 0.22),
+      covert: featherMat(TEX.covert, 0.24),
+      bodyCovert: featherMat(TEX.contour, 0.24),
+      tail: featherMat(TEX.tail, 0.2),
+      crest: featherMat(TEX.crest, 0.26),
+      plume: featherMat(TEX.plume, 0.28, false),
+      body: new THREE.MeshStandardMaterial({ map: TEX.body.map, normalMap: TEX.body.normalMap, emissiveMap: TEX.body.map, emissive: 0xffffff, emissiveIntensity: 0.22, roughness: 0.8 }),
+      leg: new THREE.MeshStandardMaterial({ map: TEX.scales.map, normalMap: TEX.scales.normalMap, roughness: 0.5, emissive: 0x3a1606, emissiveIntensity: 0.4 }),
       talon: new THREE.MeshStandardMaterial({ color: 0x1a0a0c, roughness: 0.25 }),
       beak: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, emissive: 0x3a1806, emissiveIntensity: 0.4 }),
       iris: new THREE.MeshStandardMaterial({ color: 0xffb21a, emissive: 0xff7a00, emissiveIntensity: 0.45, roughness: 0.15 }),
@@ -375,26 +346,72 @@
     // Plumes souples : chaque plume fléchit sur sa longueur (de plus en plus vers la pointe), ondule
     // et son bord de fuite frémit dans l'air. Le calcul se fait dans le shader ; chaque groupe de plumes
     // (rémiges, couvertures, aigrette, queue, plumes du corps) a ses propres réglages, mis à jour à chaque image.
-    function softFeathers(mat) {
-      const u = { bend: { value: 0 }, flutter: { value: 0 }, ripple: { value: 0 }, time: { value: 0 } };
+    // Variante « pivot » (plumes fusionnées des ailes) : chaque plume tourne en plus autour de sa base,
+    // de son angle replié à son angle déployé (uExt, commun aux deux ailes) — un seul objet par rangée.
+    const FOLDU = { ext: { value: 0 }, jit: { value: 0 } };
+    function softFeathers(mat, shared, pivot) {
+      const u = shared || { bend: { value: 0 }, flutter: { value: 0 }, ripple: { value: 0 }, time: { value: 0 } };
       mat.onBeforeCompile = (sh) => {
         sh.uniforms.uBend = u.bend;
         sh.uniforms.uFlutter = u.flutter;
         sh.uniforms.uRipple = u.ripple;
         sh.uniforms.uTime = u.time;
-        sh.vertexShader = 'uniform float uBend; uniform float uFlutter; uniform float uRipple; uniform float uTime;\n'
+        sh.uniforms.uExt = FOLDU.ext;
+        sh.uniforms.uJit = FOLDU.jit;
+        let vs = 'uniform float uBend; uniform float uFlutter; uniform float uRipple; uniform float uTime; uniform float uExt; uniform float uJit;\n'
           + 'attribute float aPhase; attribute float aFlex; attribute float aT; attribute float aW; attribute vec3 aN;\n'
-          + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+          + (pivot ? 'attribute vec3 aPivot; attribute vec2 aFoldExt;\n' : '') + sh.vertexShader;
+        if (pivot) {
+          vs = vs.replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+            float fAng = mix(aFoldExt.x, aFoldExt.y, uExt) + uJit * sin(uTime * 4.7 + aPhase * 3.0);
+            float fC = cos(fAng), fS = sin(fAng);
+            objectNormal = vec3(fC * objectNormal.x + fS * objectNormal.z, objectNormal.y, -fS * objectNormal.x + fC * objectNormal.z);`);
+        }
+        vs = vs.replace('#include <begin_vertex>', `#include <begin_vertex>
             // aT : distance à la base de la plume, aW : position en travers, aN : normale de la plume
             transformed += aN * (aFlex * aT * aT * (uBend + uFlutter * sin(uTime * 11.0 + aPhase - aT * 8.0))
-              + aW * aT * aFlex * uRipple * sin(uTime * 16.0 + aPhase * 1.7 - aT * 11.0));`);
+              + aW * aT * aFlex * uRipple * sin(uTime * 16.0 + aPhase * 1.7 - aT * 11.0));` + (pivot ? `
+            vec3 fLp = transformed - aPivot;
+            transformed = aPivot + vec3(fC * fLp.x + fS * fLp.z, fLp.y, -fS * fLp.x + fC * fLp.z);` : ''));
+        sh.vertexShader = vs;
       };
+      mat.customProgramCacheKey = () => (pivot ? 'plume-pivot' : 'plume');
       return u;
     }
     const SOFT = {
       primary: softFeathers(MAT.primary), secondary: softFeathers(MAT.secondary), covert: softFeathers(MAT.covert),
       body: softFeathers(MAT.bodyCovert), crest: softFeathers(MAT.crest), tail: softFeathers(MAT.tail),
     };
+    MAT.covertW = MAT.covert.clone();
+    MAT.bodyCovertW = MAT.bodyCovert.clone();
+    softFeathers(MAT.covertW, SOFT.covert, true);
+    softFeathers(MAT.bodyCovertW, SOFT.body, true);
+    // Rangée de plumes d'aile fusionnée : chaque plume garde sa base (pivot) et ses angles replié/déployé
+    function wingRow(items, mat) {
+      const P = [], Nn = [], UV = [], CO = [], PH = [], FX = [], T = [], WW = [], AN = [], PV = [], FE = [], IDX = [];
+      for (const it of items) {
+        const g = featherMesh(mat, it.L, it.w, it.bend, it.flex).geometry;
+        const base = P.length / 3, pos = g.attributes.position, n = pos.count;
+        for (let i = 0; i < n; i++) {
+          P.push(pos.getX(i) + it.x, pos.getY(i) + it.y, pos.getZ(i) + it.z);
+          PV.push(it.x, it.y, it.z);
+          FE.push(it.fold, it.ext);
+        }
+        Nn.push(...g.attributes.normal.array); UV.push(...g.attributes.uv.array); CO.push(...g.attributes.color.array);
+        PH.push(...g.attributes.aPhase.array); FX.push(...g.attributes.aFlex.array);
+        T.push(...g.attributes.aT.array); WW.push(...g.attributes.aW.array); AN.push(...g.attributes.aN.array);
+        for (const k of g.index.array) IDX.push(base + k);
+        g.dispose();
+      }
+      const geo = new THREE.BufferGeometry();
+      const set = (name, arr, k) => geo.setAttribute(name, new THREE.Float32BufferAttribute(arr, k));
+      set('position', P, 3); set('normal', Nn, 3); set('uv', UV, 2); set('color', CO, 3); set('aPhase', PH, 1); set('aFlex', FX, 1);
+      set('aT', T, 1); set('aW', WW, 1); set('aN', AN, 3); set('aPivot', PV, 3); set('aFoldExt', FE, 2);
+      geo.setIndex(IDX);
+      const m = new THREE.Mesh(geo, mat);
+      m.frustumCulled = false; // la forme dépliée sort de la boîte englobante calculée au repos
+      return m;
+    }
 
     // Plume : un plan légèrement incurvé, base à l'origine, bout vers -X ; flex règle sa souplesse.
     function featherMesh(mat, L, w, bend, flex = 1) {
@@ -414,12 +431,16 @@
       geo.setAttribute('aT', new THREE.BufferAttribute(aT, 1));
       geo.setAttribute('aW', new THREE.BufferAttribute(aW, 1));
       geo.setAttribute('aN', new THREE.BufferAttribute(aN, 3));
+      // teinte propre à la plume : un peu plus claire ou sombre, tirant vers l'or ou le rouge
+      const k = rand(0.84, 1.06), hue = rand(-0.08, 0.06), cols = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) cols.set([k, k * (1 + hue), k * (1 + hue * 0.6)], i * 3);
+      geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
       return new THREE.Mesh(geo, mat);
     }
     // Des dizaines de petites plumes fusionnées en un seul objet (un seul appel de dessin), chacune
     // gardant sa souplesse propre. items : [{ L, w, bend, flex, pos, rot }]
     function mergeFeathers(items, mat) {
-      const P = [], Nn = [], UV = [], PH = [], FX = [], T = [], WW = [], AN = [], IDX = [];
+      const P = [], Nn = [], UV = [], PH = [], FX = [], T = [], WW = [], AN = [], CO = [], IDX = [];
       const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new V3(), one = new V3(1, 1, 1);
       for (const it of items) {
         const g = featherMesh(mat, it.L, it.w, it.bend, it.flex).geometry;
@@ -433,14 +454,14 @@
           UV.push(uv.getX(i), uv.getY(i));
         }
         PH.push(...g.attributes.aPhase.array); FX.push(...g.attributes.aFlex.array);
-        T.push(...g.attributes.aT.array); WW.push(...g.attributes.aW.array);
+        T.push(...g.attributes.aT.array); WW.push(...g.attributes.aW.array); CO.push(...g.attributes.color.array);
         for (const k of g.index.array) IDX.push(base + k);
         g.dispose();
       }
       const geo = new THREE.BufferGeometry();
       const set = (name, arr, k) => geo.setAttribute(name, new THREE.Float32BufferAttribute(arr, k));
       set('position', P, 3); set('normal', Nn, 3); set('uv', UV, 2); set('aPhase', PH, 1); set('aFlex', FX, 1);
-      set('aT', T, 1); set('aW', WW, 1); set('aN', AN, 3);
+      set('aT', T, 1); set('aW', WW, 1); set('aN', AN, 3); set('color', CO, 3);
       geo.setIndex(IDX);
       return new THREE.Mesh(geo, mat);
     }
@@ -539,29 +560,8 @@
     flameAt(body, -0.22, 0.07, -0.03, 1, 0.18);
 
     // Tête de rapace : crâne allongé et plat, joues pleines, arcades saillantes, gros bec crochu
-    const headTex = canvasTex(256, 256, (g, W, H) => {
-      const grad = g.createLinearGradient(0, 0, 0, H);
-      grad.addColorStop(0, '#a8241c');
-      grad.addColorStop(0.3, '#e0501c');
-      grad.addColorStop(0.55, '#ff9a2c');
-      grad.addColorStop(0.8, '#ffcf72');
-      grad.addColorStop(1, '#ffe6a6');
-      g.fillStyle = grad;
-      g.fillRect(0, 0, W, H);
-      // petites plumes fines, plus serrées que sur le corps
-      for (let r = 0; r < 22; r++) {
-        for (let c = -1; c <= 22; c++) {
-          const x = (c + (r % 2) * 0.5) * (W / 22), y = r * (H / 22), w = W / 22;
-          g.beginPath();
-          g.moveTo(x - w * 0.5, y);
-          g.quadraticCurveTo(x, y + w * 1.6, x + w * 0.5, y);
-          g.strokeStyle = 'rgba(96,14,16,0.22)';
-          g.lineWidth = 1;
-          g.stroke();
-        }
-      }
-    });
-    MAT.head = new THREE.MeshStandardMaterial({ map: headTex, emissiveMap: headTex, emissive: 0xffffff, emissiveIntensity: 0.38, roughness: 0.7 });
+    const headTex = velvetPair(256, 256, ramp([[0, [150, 30, 24]], [0.3, [208, 68, 28]], [0.55, [238, 140, 50]], [0.8, [248, 196, 108]], [1, [252, 226, 166]]]), false);
+    MAT.head = new THREE.MeshPhysicalMaterial({ map: headTex.map, normalMap: headTex.normalMap, normalScale: new THREE.Vector2(0.6, 0.6), emissiveMap: headTex.map, emissive: 0xffffff, emissiveIntensity: 0.2, roughness: 0.7, sheen: 0.6, sheenRoughness: 0.5, sheenColor: new THREE.Color(0xffc887) });
     MAT.cere = new THREE.MeshStandardMaterial({ color: 0xffe08a, roughness: 0.4, emissive: 0x6a4a10, emissiveIntensity: 0.35 });
     MAT.eyeRing = new THREE.MeshStandardMaterial({ color: 0x3a0a0c, roughness: 0.35 });
     const HEAD_SPHERE = new THREE.SphereGeometry(1, 32, 24);
@@ -733,11 +733,18 @@
         m.position.set(0.012, 0, len / 2);
         parent.add(m);
       };
-      bone(shoulder, 0.3, 0.029);
-      bone(elbow, 0.34, 0.024);
-      bone(wrist, 0.26, 0.018);
+      bone(shoulder, 0.3, 0.02);
+      bone(elbow, 0.34, 0.016);
+      bone(wrist, 0.26, 0.012);
       const feathers = [], tips = [];
+      const rows = new Map(); // couvertures : regroupées par os et par matière, dessinées en un seul objet
       const add = (group, mat, L, w, x, y, z, ext, fold, bend, flex) => {
+        if (mat === MAT.covert || mat === MAT.bodyCovert) {
+          const key = group.uuid + mat.uuid;
+          if (!rows.has(key)) rows.set(key, { group, mat: mat === MAT.covert ? MAT.covertW : MAT.bodyCovertW, items: [] });
+          rows.get(key).items.push({ L, w, x, y, z, ext, fold, bend, flex });
+          return null;
+        }
         const m = featherMesh(mat, L, w, bend, flex);
         m.position.set(x, y, z);
         group.add(m);
@@ -763,10 +770,24 @@
       // Grandes couvertures
       for (let i = 0; i < 9; i++) add(elbow, MAT.covert, 0.18, 0.08, 0.03, 0.05 + 0.001 * i, 0.02 + i * 0.033, lerp(0.05, 0.38, i / 8), -1.45, 0.08, 0.5);
       for (let i = 0; i < 6; i++) add(wrist, MAT.covert, 0.17, 0.07, 0.025, 0.05 + 0.001 * i, 0.02 + i * 0.04, lerp(0.45, 1.3, i / 5), 1.5, 0.08, 0.5);
-      // Petites couvertures
-      for (let i = 0; i < 9; i++) add(elbow, MAT.covert, 0.1, 0.065, 0.06, 0.062 + 0.001 * i, 0.02 + i * 0.033, 0.2, -1.4, 0.1, 0.35);
-      for (let i = 0; i < 5; i++) add(shoulder, MAT.covert, 0.12, 0.07, 0.045, 0.066 + 0.001 * i, 0.04 + i * 0.05, -0.05, 0.5, 0.1, 0.35);
+      // Petites couvertures et plumes du bord d'attaque : deux rangs serrés de plumes douces qui se chevauchent
+      for (let i = 0; i < 15; i++) {
+        add(elbow, MAT.bodyCovert, rand(0.1, 0.125), 0.07, 0.06, 0.062 + 0.0008 * i, 0.01 + i * 0.021, 0.2, -1.4, 0.08, 0.35);
+        add(elbow, MAT.bodyCovert, rand(0.07, 0.09), 0.06, 0.08, 0.072 + 0.0008 * i, 0.02 + i * 0.021, 0.2, -1.4, 0.06, 0.3);
+      }
+      for (let i = 0; i < 8; i++) {
+        add(shoulder, MAT.bodyCovert, rand(0.11, 0.135), 0.075, 0.045, 0.066 + 0.0008 * i, 0.03 + i * 0.034, -0.05, 0.5, 0.08, 0.35);
+        add(shoulder, MAT.bodyCovert, rand(0.08, 0.1), 0.065, 0.065, 0.076 + 0.0008 * i, 0.045 + i * 0.034, -0.05, 0.5, 0.06, 0.3);
+      }
+      // Le bord d'attaque est emplumé tout autour de l'os : rang sur la main, rangs sous l'aile
+      for (let i = 0; i < 10; i++) add(wrist, MAT.bodyCovert, rand(0.07, 0.09), 0.06, 0.05, 0.04 + 0.0008 * i, 0.01 + i * 0.025, lerp(0.45, 1.2, i / 9), 1.5, 0.06, 0.3);
+      for (let i = 0; i < 15; i++) add(elbow, MAT.bodyCovert, rand(0.09, 0.11), 0.065, 0.06, -0.02 - 0.0008 * i, 0.015 + i * 0.021, 0.2, -1.4, -0.06, 0.3);
+      for (let i = 0; i < 15; i++) add(elbow, MAT.bodyCovert, rand(0.06, 0.075), 0.055, 0.07, 0.028 + 0.0008 * i, 0.02 + i * 0.021, 0.2, -1.4, 0.02, 0.25);
+      for (let i = 0; i < 8; i++) add(shoulder, MAT.bodyCovert, rand(0.07, 0.085), 0.06, 0.06, 0.03 + 0.0008 * i, 0.05 + i * 0.034, -0.05, 0.5, 0.02, 0.25);
+      for (let i = 0; i < 8; i++) add(shoulder, MAT.bodyCovert, rand(0.1, 0.12), 0.07, 0.05, -0.024 - 0.0008 * i, 0.04 + i * 0.034, -0.05, 0.5, -0.06, 0.3);
+      for (let i = 0; i < 8; i++) add(wrist, MAT.bodyCovert, rand(0.06, 0.08), 0.055, 0.045, -0.016 - 0.0008 * i, 0.015 + i * 0.028, lerp(0.45, 1.2, i / 7), 1.5, -0.05, 0.3);
       tips.push(anchor(wrist, 0, 0, 0.26, 0.9));
+      for (const r of rows.values()) r.group.add(wingRow(r.items, r.mat));
       return { root, shoulder, elbow, wrist, feathers, tips };
     }
     const wings = [buildWing(1), buildWing(-1)];
@@ -835,17 +856,20 @@
       hip.position.set(0.03, -0.075, 0.055 * s);
       body.add(hip);
       const thigh = new THREE.Mesh(BODY_SPHERE, MAT.body);
-      thigh.scale.set(0.045, 0.07, 0.034);
+      thigh.scale.set(0.036, 0.056, 0.028);
       thigh.position.set(-0.015, -0.025, -0.012 * s);
       hip.add(thigh);
-      // Culotte de plumes qui retombe sur la cuisse
-      for (const [a, L] of [[-0.6, 0.13], [0, 0.15], [0.6, 0.13]]) {
-        const f = featherMesh(MAT.bodyCovert, L, 0.07, 0.1, 0.7);
-        f.position.set(0.01, 0.01, Math.sin(a) * 0.035);
-        f.rotation.order = 'ZYX';
-        f.rotation.set(Math.PI / 2 + a * 0.6, 0, Math.PI / 2 - 0.15);
-        hip.add(f);
+      // Culotte : deux rangs de plumes douces qui enveloppent la cuisse et retombent sur le tarse
+      const pants = [];
+      for (let i = 0; i < 7; i++) {
+        const a = -1.2 + i * 0.4;
+        pants.push({ L: rand(0.14, 0.17), w: 0.07, bend: 0.1, flex: 0.7, pos: new V3(0.012, 0.015, Math.sin(a) * 0.036), rot: new THREE.Euler(Math.PI / 2 + a * 0.6, 0, Math.PI / 2 - 0.12, 'ZYX') });
       }
+      for (let i = 0; i < 5; i++) {
+        const a = -1 + i * 0.5;
+        pants.push({ L: rand(0.11, 0.13), w: 0.065, bend: 0.1, flex: 0.6, pos: new V3(0.004, -0.03, Math.sin(a) * 0.03), rot: new THREE.Euler(Math.PI / 2 + a * 0.6, 0, Math.PI / 2 - 0.08, 'ZYX') });
+      }
+      hip.add(mergeFeathers(pants, MAT.bodyCovert));
       const shin = new THREE.Group();
       shin.position.set(0, -0.11, 0);
       hip.add(shin);
@@ -889,13 +913,37 @@
     scene.add(bird);
     scene.add(loose);
     for (const p of plumes) scene.add(p.mesh);
-    scene.add(new THREE.HemisphereLight(0xfff2dc, 0x6a1c12, 1.3));
-    const key = new THREE.DirectionalLight(0xffffff, 2.2);
+    scene.add(new THREE.HemisphereLight(0xfff2dc, 0x6a1c12, 0.55));
+    const key = new THREE.DirectionalLight(0xfff4e6, 2.6);
     key.position.set(-0.6, 1, 0.9);
     scene.add(key);
-    const rim = new THREE.DirectionalLight(0xff9a40, 1.4);
+    const rim = new THREE.DirectionalLight(0xff9a40, 1.6);
     rim.position.set(0.5, 0.25, -1);
     scene.add(rim);
+    // Lumière d'ambiance : un ciel chaud et diffus avec une grande source douce en haut à gauche, dont
+    // les plumes renvoient des reflets veloutés (éclairage par image, calculé sur place, sans fichier)
+    {
+      const env = new THREE.Scene();
+      const geo = new THREE.SphereGeometry(10, 32, 16), pos = geo.attributes.position, cols = [];
+      const top = new THREE.Color(1.05, 0.98, 0.9), mid = new THREE.Color(0.95, 0.72, 0.5), low = new THREE.Color(0.22, 0.08, 0.06), c = new THREE.Color();
+      for (let i = 0; i < pos.count; i++) {
+        const y = pos.getY(i) / 10;
+        c.copy(mid).lerp(y > 0 ? top : low, Math.abs(y));
+        cols.push(c.r, c.g, c.b);
+      }
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+      env.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ side: THREE.BackSide, vertexColors: true })));
+      const soft = new THREE.Mesh(new THREE.PlaneGeometry(7, 5), new THREE.MeshBasicMaterial({ color: new THREE.Color(5, 4.6, 4.1), side: THREE.DoubleSide }));
+      soft.position.set(-4.5, 6, 5);
+      soft.lookAt(0, 0, 0);
+      env.add(soft);
+      const pm = new THREE.PMREMGenerator(renderer);
+      scene.environment = pm.fromScene(env, 0.03).texture;
+      scene.environmentIntensity = 0.35;
+      pm.dispose();
+    }
+    renderer.toneMapping = THREE.NeutralToneMapping; // hautes lumières adoucies, couleurs préservées
+    renderer.toneMappingExposure = 1;
 
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, opacity: 0.4 }));
     glowScene.add(glow);
@@ -1739,6 +1787,8 @@
         // chaque rémige bouge un peu à son rythme dans le vent (rien quand l'aile est repliée)
         const jit = 0.02 * (1 - fold) * st.air;
         for (const f of w.feathers) f.m.rotation.y = lerp(f.fold, f.ext, ext) + jit * Math.sin(time * 4.7 + f.j * 1.9 + w.root.userData.side);
+        FOLDU.ext.value = ext;
+        FOLDU.jit.value = jit;
       }
       // Plumes souples (voir softFeathers) : flexion des ailes selon leur vitesse, frémissement dans l'air
       const speed = st.vel.length() / S, air = st.air;
