@@ -172,12 +172,13 @@
         const b = x + ad * H * sl; // reste constant le long d'une barbe
         const ph = (b + n(b * 0.04, ad * H * 0.05) * 7) / sp;
         const barb = 0.5 + 0.5 * Math.cos(ph * TAU), slope = -Math.sin(ph * TAU) * Math.PI;
-        // bord effiloché qui suit la pointe des barbes, barbes qui s'écartent, duvet à la base
-        let a = 1 - smooth((s - 0.8 + (n(b * 0.07, 7.3) - 0.5) * 0.28 + (1 - barb) * 0.1) / 0.22);
-        const gap = smooth((n(b * 0.05 + 31, 1.7) - 0.7) / 0.1) * smooth((s - 0.3) / 0.3);
-        a *= 1 - gap * (1 - barb) * 0.95;
+        // Contour net (pas de zones à demi transparentes : à l'écran elles se tramaient en pixels) :
+        // bord effiloché qui suit la pointe des barbes, quelques encoches où les barbes s'écartent,
+        // base duveteuse au contour plus ébouriffé
         const fluff = down > 0 ? smooth((t - (1 - down)) / down) : 0;
-        a *= 1 - fluff * (0.35 + 0.6 * n(x * 0.25, y * 0.25));
+        const edge = s - 0.86 + (n(b * 0.035, 7.3) - 0.5) * 0.18 + fluff * (n(x * 0.08, y * 0.08) - 0.35) * 0.6;
+        let a = 1 - smooth(edge / 0.05 + 0.5);
+        a *= 1 - smooth((n(b * 0.03 + 31, 1.7) - 0.78) / 0.04) * smooth((s - 0.45) / 0.1);
         const c = f.color(t, Math.min(1, s));
         let k = (0.82 + 0.26 * barb) * (0.88 + 0.24 * n(x * 0.012, y * 0.04)) * (1 - 0.18 * s * s);
         k = lerp(k, 1.06, fluff * 0.6);
@@ -210,6 +211,7 @@
       tail: ramp([[0, [54, 12, 14]], [0.12, [112, 20, 20]], [0.35, [188, 46, 24]], [0.65, [234, 116, 38]], [1, [248, 202, 118]]]),
       crest: ramp([[0, [140, 24, 20]], [0.3, [214, 66, 26]], [0.7, [244, 156, 54]], [1, [250, 210, 136]]]),
       contour: ramp([[0, [232, 124, 42]], [0.35, [208, 74, 28]], [0.75, [228, 124, 50]], [1, [246, 200, 140]]]),
+      small: ramp([[0, [236, 132, 48]], [0.5, [226, 112, 40]], [1, [240, 160, 72]]]),
     };
     const FEATHER = {
       primary: { top: 0.17, bot: 0.45, tip: 0.12, round: 0.55, spacing: 2.4 },
@@ -218,6 +220,7 @@
       tail: { top: 0.42, bot: 0.42, tip: 0.14, round: 0.7, spacing: 2.4 },
       crest: { top: 0.2, bot: 0.2, tip: 0.08, round: 0.3, spacing: 2.2, down: 0.25 },
       contour: { top: 0.44, bot: 0.44, tip: 0.32, round: 0.85, spacing: 3, slant: 1.1, down: 0.3 },
+      small: { top: 0.46, bot: 0.46, tip: 0.5, round: 1, spacing: 5, slant: 1, down: 0 },
     };
     function realFeather(kind) {
       const P = FEATHER[kind], col = PAL[kind];
@@ -270,9 +273,9 @@
         const s1 = n(u * 0.05, v * 0.55), s2 = m(u * 0.11 + 9, v * 1.1);
         const streak = s1 * 0.65 + s2 * 0.35;
         const c = color(y / (H - 1));
-        const k = (0.8 + 0.34 * streak) * (0.92 + 0.16 * m(x * 0.02, y * 0.02));
+        const k = (0.88 + 0.18 * streak) * (0.92 + 0.16 * m(x * 0.02, y * 0.02));
         o[0] = c[0] * k; o[1] = c[1] * k; o[2] = c[2] * k; o[3] = 255;
-        const g = (n(u * 0.05, (v + 1) * 0.55) - s1) * 2.2;
+        const g = (n(u * 0.05, (v + 1) * 0.55) - s1) * 1.1;
         o[dir ? 5 : 4] = 0; o[dir ? 4 : 5] = g; o[6] = Math.sqrt(Math.max(0.2, 1 - g * g));
       });
     }
@@ -304,6 +307,7 @@
       tail: realFeather('tail'),
       crest: realFeather('crest'),
       contour: realFeather('contour'),
+      small: realFeather('small'),
       plume: realPlume(),
       body: velvetPair(256, 256, ramp([[0, [246, 178, 92]], [0.5, [236, 132, 50]], [1, [214, 84, 34]]]), true),
       scales: scutesPair(),
@@ -323,16 +327,13 @@
       secondary: featherMat(TEX.secondary, 0.22),
       covert: featherMat(TEX.covert, 0.24),
       bodyCovert: featherMat(TEX.contour, 0.24),
+      headFeather: featherMat(TEX.small, 0.22),
       tail: featherMat(TEX.tail, 0.2),
       crest: featherMat(TEX.crest, 0.26),
       plume: featherMat(TEX.plume, 0.28, false),
       body: new THREE.MeshStandardMaterial({ map: TEX.body.map, normalMap: TEX.body.normalMap, emissiveMap: TEX.body.map, emissive: 0xffffff, emissiveIntensity: 0.22, roughness: 0.8 }),
       leg: new THREE.MeshStandardMaterial({ map: TEX.scales.map, normalMap: TEX.scales.normalMap, roughness: 0.5, emissive: 0x3a1606, emissiveIntensity: 0.4 }),
       talon: new THREE.MeshStandardMaterial({ color: 0x1a0a0c, roughness: 0.25 }),
-      beak: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, emissive: 0x3a1806, emissiveIntensity: 0.4 }),
-      iris: new THREE.MeshStandardMaterial({ color: 0xffb21a, emissive: 0xff7a00, emissiveIntensity: 0.45, roughness: 0.15 }),
-      pupil: new THREE.MeshStandardMaterial({ color: 0x080203, roughness: 0.05 }),
-      brow: new THREE.MeshStandardMaterial({ color: 0xc23a18, emissive: 0x6a1408, emissiveIntensity: 0.5, roughness: 0.6 }),
     };
 
     /* ---------- Géométrie ---------- */
@@ -382,6 +383,7 @@
       primary: softFeathers(MAT.primary), secondary: softFeathers(MAT.secondary), covert: softFeathers(MAT.covert),
       body: softFeathers(MAT.bodyCovert), crest: softFeathers(MAT.crest), tail: softFeathers(MAT.tail),
     };
+    softFeathers(MAT.headFeather, SOFT.body);
     MAT.covertW = MAT.covert.clone();
     MAT.bodyCovertW = MAT.bodyCovert.clone();
     softFeathers(MAT.covertW, SOFT.covert, true);
@@ -444,7 +446,7 @@
       const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new V3(), one = new V3(1, 1, 1);
       for (const it of items) {
         const g = featherMesh(mat, it.L, it.w, it.bend, it.flex).geometry;
-        q.setFromEuler(it.rot);
+        if (it.q) q.copy(it.q); else q.setFromEuler(it.rot);
         m4.compose(it.pos, q, one);
         const base = P.length / 3, pos = g.attributes.position, nor = g.attributes.normal, uv = g.attributes.uv;
         for (let i = 0; i < pos.count; i++) {
@@ -454,7 +456,9 @@
           UV.push(uv.getX(i), uv.getY(i));
         }
         PH.push(...g.attributes.aPhase.array); FX.push(...g.attributes.aFlex.array);
-        T.push(...g.attributes.aT.array); WW.push(...g.attributes.aW.array); CO.push(...g.attributes.color.array);
+        T.push(...g.attributes.aT.array); WW.push(...g.attributes.aW.array);
+        const tc = g.attributes.color.array, tint = it.tint || [1, 1, 1];
+        for (let i = 0; i < tc.length; i++) CO.push(tc[i] * tint[i % 3]);
         for (const k of g.index.array) IDX.push(base + k);
         g.dispose();
       }
@@ -561,100 +565,169 @@
 
     // Tête de rapace : crâne allongé et plat, joues pleines, arcades saillantes, gros bec crochu
     const headTex = velvetPair(256, 256, ramp([[0, [150, 30, 24]], [0.3, [208, 68, 28]], [0.55, [238, 140, 50]], [0.8, [248, 196, 108]], [1, [252, 226, 166]]]), false);
-    MAT.head = new THREE.MeshPhysicalMaterial({ map: headTex.map, normalMap: headTex.normalMap, normalScale: new THREE.Vector2(0.6, 0.6), emissiveMap: headTex.map, emissive: 0xffffff, emissiveIntensity: 0.2, roughness: 0.7, sheen: 0.6, sheenRoughness: 0.5, sheenColor: new THREE.Color(0xffc887) });
-    MAT.cere = new THREE.MeshStandardMaterial({ color: 0xffe08a, roughness: 0.4, emissive: 0x6a4a10, emissiveIntensity: 0.35 });
-    MAT.eyeRing = new THREE.MeshStandardMaterial({ color: 0x3a0a0c, roughness: 0.35 });
+    MAT.head = new THREE.MeshPhysicalMaterial({ map: headTex.map, normalMap: headTex.normalMap, normalScale: new THREE.Vector2(0.35, 0.35), emissiveMap: headTex.map, emissive: 0xffffff, emissiveIntensity: 0.18, roughness: 0.75, sheen: 0.5, sheenRoughness: 0.5, sheenColor: new THREE.Color(0xffc887) });
+    MAT.beak = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.26, clearcoat: 0.7, clearcoatRoughness: 0.22, emissive: 0x3a1806, emissiveIntensity: 0.22 });
+    MAT.lid = new THREE.MeshStandardMaterial({ color: 0x2a0b08, roughness: 0.5 });
     const HEAD_SPHERE = new THREE.SphereGeometry(1, 32, 24);
 
     const head = new THREE.Group();
     head.position.set(0.37, 0.122, 0);
     body.add(head);
-    const skull = new THREE.Mesh(HEAD_SPHERE, MAT.head);
-    skull.scale.set(0.108, 0.072, 0.07);
-    head.add(skull);
-    const nape = new THREE.Mesh(HEAD_SPHERE, MAT.head);
-    nape.scale.set(0.07, 0.07, 0.066);
-    nape.position.set(-0.04, -0.01, 0);
-    head.add(nape);
-    const cheek = new THREE.Mesh(HEAD_SPHERE, MAT.head);
-    cheek.scale.set(0.066, 0.046, 0.064);
-    cheek.position.set(0.035, -0.032, 0);
-    head.add(cheek);
-    // Bec crochu, extrudé à partir de son profil
-    const beakShape = new THREE.Shape();
-    beakShape.moveTo(0, 0.026);
-    beakShape.quadraticCurveTo(0.07, 0.032, 0.104, -0.012);
-    beakShape.quadraticCurveTo(0.099, -0.03, 0.087, -0.021);
-    beakShape.quadraticCurveTo(0.068, -0.004, 0.03, -0.011);
-    beakShape.lineTo(0, -0.019);
-    beakShape.closePath();
-    const beakGeo = new THREE.ExtrudeGeometry(beakShape, { depth: 0.034, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.006, bevelSegments: 3, curveSegments: 12 });
-    beakGeo.translate(0, 0, -0.017);
+    // Crâne sculpté d'une pièce : ovale allongé au sommet aplati, arcades sourcilières saillantes qui
+    // surplombent les yeux, orbites creusées, joues pleines, nuque qui rejoint le cou
+    const gauss = (x, y, z, cx, cy, cz, w) => Math.exp(-((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2) / (w * w));
+    function skullR(d) {
+      const az = Math.abs(d.z);
+      const r = 1 / Math.hypot(d.x / (d.x >= 0 ? 0.104 : 0.084), d.y / (d.y >= 0 ? 0.066 : 0.06), az / 0.066);
+      return r * (1 + 0.16 * gauss(d.x, d.y, az, 0.55, 0.52, 0.62, 0.26) // arcade sourcilière
+        - 0.05 * gauss(d.x, d.y, az, 0.45, 0.06, 0.88, 0.22) // orbite
+        + 0.08 * gauss(d.x, d.y, az, 0.15, -0.6, 0.75, 0.4) // joue
+        + 0.12 * gauss(d.x, d.y, az, -0.82, -0.3, 0, 0.5) // nuque
+        - 0.05 * gauss(d.x, d.y, az, 0.25, 0.97, 0, 0.35)); // sommet aplati
+    }
     {
-      const pos = beakGeo.attributes.position, col = [];
-      const a = new THREE.Color('#ffe9a8'), b = new THREE.Color('#f2b13a'), c = new THREE.Color('#4a200c');
-      for (let i = 0; i < pos.count; i++) {
-        const t = clamp(pos.getX(i) / 0.104, 0, 1);
-        const k = t < 0.62 ? a.clone().lerp(b, t / 0.62) : b.clone().lerp(c, (t - 0.62) / 0.38);
-        col.push(k.r, k.g, k.b);
+      const geo = new THREE.SphereGeometry(1, 72, 54), p = geo.attributes.position, d = new V3();
+      for (let i = 0; i < p.count; i++) {
+        d.fromBufferAttribute(p, i).normalize();
+        const r = skullR(d);
+        p.setXYZ(i, d.x * r, d.y * r, d.z * r);
       }
-      beakGeo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      geo.computeVertexNormals();
+      head.add(new THREE.Mesh(geo, MAT.head));
     }
-    const beak = new THREE.Mesh(beakGeo, MAT.beak);
-    beak.position.set(0.078, -0.006, 0);
-    beak.scale.set(1.3, 1.3, 1.25);
-    head.add(beak);
-    const cere = new THREE.Mesh(HEAD_SPHERE, MAT.cere);
-    cere.scale.set(0.022, 0.02, 0.028);
-    cere.position.set(0.084, 0.008, 0);
-    head.add(cere);
-    const jawShape = new THREE.Shape();
-    jawShape.moveTo(0, 0);
-    jawShape.quadraticCurveTo(0.05, -0.004, 0.075, -0.012);
-    jawShape.quadraticCurveTo(0.05, -0.022, 0, -0.02);
-    jawShape.closePath();
-    const jawGeo = new THREE.ExtrudeGeometry(jawShape, { depth: 0.026, bevelEnabled: true, bevelThickness: 0.005, bevelSize: 0.004, bevelSegments: 2 });
-    jawGeo.translate(0, 0, -0.013);
-    {
-      const pos = jawGeo.attributes.position, col = [];
-      for (let i = 0; i < pos.count; i++) col.push(0.95, 0.62, 0.2);
-      jawGeo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    // Bec de rapace : une coque lissée le long d'une ligne qui se recourbe en crochet, à section arrondie
+    // (bombée dessus, plus plate dessous) ; cire jaune à la base, corne ambrée, pointe sombre.
+    // f(t) → { x, y, h, w } le long du bec ; col(t) → couleur ; flip : section bombée dessous (mandibule)
+    function beakLoft(f, col, flip, N = 44, M = 28) {
+      const pos = [], cols = [], idx = [];
+      for (let i = 0; i <= N; i++) {
+        const t = i / N, a = f(t), p = f(Math.max(0, t - 0.01)), q = f(Math.min(1, t + 0.01));
+        let tx = q.x - p.x, ty = q.y - p.y;
+        const tl = Math.hypot(tx, ty) || 1;
+        tx /= tl; ty /= tl;
+        const c = col(t);
+        for (let j = 0; j <= M; j++) {
+          const ph = (j / M) * TAU, cs = Math.cos(ph), sn = flip ? -Math.sin(ph) : Math.sin(ph);
+          let up = sn >= 0 ? Math.pow(sn, 0.8) : -Math.pow(-sn, 1.4) * 0.75;
+          if (flip) up = -up;
+          const yy = (up * a.h) / 2, zz = (Math.sign(cs) * Math.pow(Math.abs(cs), 0.8) * a.w) / 2;
+          pos.push(a.x - ty * yy, a.y + tx * yy, zz);
+          cols.push(c.r, c.g, c.b);
+        }
+      }
+      for (let i = 0; i < N; i++) {
+        for (let j = 0; j < M; j++) {
+          const k = i * (M + 1) + j, l = k + M + 1;
+          if (flip) idx.push(k, k + 1, l, l, k + 1, l + 1); else idx.push(k, l, k + 1, l, l + 1, k + 1);
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      return new THREE.Mesh(geo, MAT.beak);
     }
+    const BEAK_COL = [[0, '#ffcf5a'], [0.11, '#ffd96e'], [0.16, '#f4dca0'], [0.55, '#e0a03a'], [0.8, '#5a2a10'], [1, '#2a1208']].map(([t, h]) => [t, new THREE.Color(h)]);
+    const beakColor = (stops) => (t) => {
+      let j = 1;
+      while (j < stops.length - 1 && stops[j][0] < t) j++;
+      return stops[j - 1][1].clone().lerp(stops[j][1], clamp((t - stops[j - 1][0]) / (stops[j][0] - stops[j - 1][0]), 0, 1));
+    };
+    head.add(beakLoft((t) => {
+      const hook = Math.pow(smooth((t - 0.45) / 0.55), 1.5), end = smooth((t - 0.7) / 0.3);
+      return { x: 0.068 + 0.145 * t - 0.014 * end, y: 0.008 + 0.004 * t - 0.062 * hook, h: 0.062 * (1 - 0.7 * t) * (1 - 0.85 * end) + 0.002, w: 0.054 * (1 - 0.7 * t) * (1 - 0.85 * end) + 0.002 };
+    }, beakColor(BEAK_COL), false));
+    for (const s of [-1, 1]) { // narines, dans la cire
+      const nostril = new THREE.Mesh(HEAD_SPHERE, MAT.lid);
+      nostril.scale.set(0.007, 0.004, 0.003);
+      nostril.position.set(0.086, 0.019, 0.022 * s);
+      head.add(nostril);
+    }
+    // Mandibule, montée sur une articulation pour s'ouvrir
     const jaw = new THREE.Group();
-    jaw.position.set(0.08, -0.03, 0);
-    jaw.scale.set(1.25, 1.25, 1.2);
-    jaw.add(new THREE.Mesh(jawGeo, MAT.beak));
+    jaw.position.set(0.078, -0.022, 0);
+    jaw.add(beakLoft((t) => ({ x: -0.006 + 0.104 * t, y: -0.004 - 0.004 * t - 0.006 * t * t, h: 0.026 * (1 - 0.75 * t) + 0.002, w: 0.046 * (1 - 0.7 * t) + 0.002 }),
+      beakColor([[0, '#f2d79a'], [0.6, '#d29032'], [1, '#4a220c']].map(([t, h]) => [t, new THREE.Color(h)])), true));
     head.add(jaw);
-    // Yeux sous l'arcade, cerclés de sombre, et trait sombre qui file vers l'arrière
+
+    // Yeux de rapace, logés sous l'arcade : iris doré aux fibres rayonnantes, pupille noire,
+    // paupière sombre, et une cornée bombée qui ne fait qu'ajouter les reflets (l'œil « vit »)
+    const irisNoise = valueNoise();
+    const irisTex = texPair(128, 128, (x, y, o) => {
+      const n = irisNoise, dx = (x - 63.5) / 60, dy = (y - 63.5) / 60, d = Math.hypot(dx, dy), ang = Math.atan2(dy, dx);
+      const fib = n(ang * 14 + 40, d * 5) * 0.6 + n(ang * 40 + 9, d * 12) * 0.4;
+      let c;
+      if (d < 0.36) c = [10, 5, 5];
+      else if (d < 0.9) {
+        const k = (d - 0.36) / 0.54;
+        c = [lerp(255, 226, k), lerp(206, 112, k), lerp(70, 18, k)];
+        const f = 0.72 + 0.5 * fib - 0.25 * smooth((0.46 - d) / 0.1) - 0.45 * smooth((d - 0.8) / 0.1);
+        c = c.map((v) => v * f);
+      } else c = [44, 12, 8];
+      o[0] = c[0]; o[1] = c[1]; o[2] = c[2]; o[3] = 255;
+    });
+    MAT.iris = new THREE.MeshStandardMaterial({ map: irisTex.map, emissiveMap: irisTex.map, emissive: 0xffffff, emissiveIntensity: 0.3, roughness: 0.4 });
+    MAT.cornea = new THREE.MeshPhysicalMaterial({ color: 0x000000, roughness: 0.04, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.02, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
     const eyes = [];
+    const eyeDir = new V3(0.45, 0.06, 0.88).normalize();
     for (const s of [-1, 1]) {
+      const dE = eyeDir.clone().setZ(eyeDir.z * s);
       const e = new THREE.Group();
-      e.position.set(0.048, 0.01, 0.05 * s);
-      const ring = new THREE.Mesh(HEAD_SPHERE, MAT.eyeRing);
-      ring.scale.set(0.022, 0.019, 0.012);
-      const iris = new THREE.Mesh(HEAD_SPHERE, MAT.iris);
-      iris.scale.set(0.017, 0.016, 0.012);
-      iris.position.z = 0.004 * s;
-      const pupil = new THREE.Mesh(HEAD_SPHERE, MAT.pupil);
-      pupil.scale.setScalar(0.009);
-      pupil.position.set(0.003, 0, 0.011 * s);
-      e.add(ring, iris, pupil);
+      e.position.copy(dE).multiplyScalar(skullR(dE) - 0.001);
+      e.quaternion.setFromUnitVectors(new V3(0, 0, 1), dE);
+      const iris = new THREE.Mesh(new THREE.CircleGeometry(0.02, 40), MAT.iris);
+      const lid = new THREE.Mesh(new THREE.TorusGeometry(0.0208, 0.0042, 10, 40), MAT.lid);
+      lid.position.z = 0.0008;
+      const cornea = new THREE.Mesh(new THREE.SphereGeometry(0.029, 28, 10, 0, TAU, 0, 0.76), MAT.cornea);
+      cornea.rotation.x = Math.PI / 2;
+      cornea.position.z = -0.029 * Math.cos(0.76);
+      e.add(iris, lid, cornea);
       head.add(e);
       eyes.push(e);
-      const stripe = new THREE.Mesh(HEAD_SPHERE, MAT.eyeRing);
-      stripe.scale.set(0.045, 0.007, 0.01);
-      stripe.position.set(0.008, 0.006, 0.058 * s);
-      stripe.rotation.set(0, -0.35 * s, 0.12);
-      head.add(stripe);
-      // Arcade sourcilière : en avancée au-dessus de l'œil, inclinée vers le bec
-      const brow = new THREE.Mesh(HEAD_SPHERE, MAT.brow);
-      brow.scale.set(0.05, 0.014, 0.026);
-      brow.position.set(0.052, 0.03, 0.043 * s);
-      brow.rotation.set(0, 0.28 * s, -0.22);
-      head.add(brow);
     }
+
+    // Plumage de la tête : des centaines de petites plumes couchées vers la nuque, qui suivent le
+    // crâne ; cramoisi sur le dessus, or sur la face, sombre sur l'arcade et en trait derrière l'œil.
+    // Le front reste lisse : c'est là qu'est gravé le M.
+    const M_DIR = new V3(0.64, 0.77, 0).normalize(), M_UP = new V3(-M_DIR.y, M_DIR.x, 0), M_SIDE = new V3(0, 0, 1);
+    {
+      const items = [], N = 300, golden = Math.PI * (3 - Math.sqrt(5)), d = new V3(), tip = new V3(), nrm = new V3();
+      const brow = new V3(0.55, 0.52, 0.62).normalize(), stripe = new V3(-0.15, 0.08, 0.95).normalize();
+      const crim = [0.95, 0.5, 0.44], gold = [1.08, 1.02, 0.86], dark = [0.62, 0.32, 0.27];
+      for (let i = 0; i < N; i++) {
+        const y = 1 - ((i + 0.5) / N) * 2, rr = Math.sqrt(1 - y * y), th = i * golden;
+        d.set(Math.cos(th) * rr, y, Math.sin(th) * rr);
+        if (d.x > 0.86 && Math.abs(d.y) < 0.4) continue; // base du bec
+        if (d.y < -0.55 && d.x < 0.5) continue; // dessous : le cou et son camail
+        const dz = new V3(d.x, d.y, Math.abs(d.z));
+        if (dz.angleTo(eyeDir) < 0.36) continue; // l'œil
+        const mc = d.dot(M_DIR);
+        if (mc > 0 && (Math.atan2(d.dot(M_SIDE), mc) / 0.52) ** 2 + (Math.atan2(d.dot(M_UP), mc) / 0.44) ** 2 < 1) continue; // le M
+        const r = skullR(d), back = smooth((0.6 - d.x) / 1.2);
+        let L = 0.042 + 0.03 * back;
+        // couleur selon la région
+        const up = smooth((d.y + 0.2) / 0.8);
+        let tint = [lerp(gold[0], crim[0], up), lerp(gold[1], crim[1], up), lerp(gold[2], crim[2], up)];
+        const kb = smooth(1 - dz.angleTo(brow) / 0.32), ks = smooth(1 - dz.angleTo(stripe) / 0.34);
+        if (kb > 0) { L *= 1 + 0.25 * kb; tint = tint.map((v, j) => lerp(v, dark[j] * 1.2, kb * 0.8)); }
+        if (ks > 0) tint = tint.map((v, j) => lerp(v, dark[j], ks));
+        // pointe vers la nuque, couchée sur la courbure du crâne
+        tip.set(-1, 0, 0).addScaledVector(d, d.x);
+        if (tip.lengthSq() < 0.04) tip.set(0, -1, 0).addScaledVector(d, -d.y);
+        tip.normalize();
+        const tilt = Math.atan(L / (2 * r));
+        nrm.copy(d).multiplyScalar(Math.cos(tilt)).addScaledVector(tip, -Math.sin(tilt));
+        tip.multiplyScalar(Math.cos(tilt)).addScaledVector(d, -Math.sin(tilt));
+        const X = tip.clone().negate(), Y = nrm.clone(), Z = new V3().crossVectors(X, Y);
+        const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
+        items.push({ L, w: 0.036 + 0.01 * back, bend: 0, flex: 0.3, pos: d.clone().multiplyScalar(r * 0.985), q, tint });
+      }
+      head.add(mergeFeathers(items, MAT.headFeather));
+    }
+
     // M gravé sur le front : une incision sombre, incrustée d'or en fusion. C'est un décalque
-    // qui épouse le crâne (une portion de la même sphère, à peine plus grande).
+    // qui épouse le crâne (même forme, à peine plus grande).
     const mTex = canvasTex(256, 256, (g) => {
       const M = new Path2D('M 46 222 L 62 46 L 128 156 L 194 46 L 210 222');
       g.lineJoin = 'miter';
@@ -679,12 +752,13 @@
       transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     });
     {
-      const R = new V3(0.108, 0.072, 0.07), c = new V3(0.64, 0.77, 0).normalize(), up = new V3(-c.y, c.x, 0), side = new V3(0, 0, 1);
+      const c = M_DIR, up = M_UP, side = M_SIDE;
       const G = 10, pos = [], uv = [], idx = [], d = new V3();
       for (let j = 0; j <= G; j++) {
         for (let i = 0; i <= G; i++) {
           const a = i / G * 2 - 1, b = j / G * 2 - 1;
-          d.copy(c).addScaledVector(side, a * 0.62).addScaledVector(up, b * 0.5).normalize().multiply(R).multiplyScalar(1.012);
+          d.copy(c).addScaledVector(side, a * 0.62).addScaledVector(up, b * 0.5).normalize();
+          d.multiplyScalar(skullR(d) * 1.012);
           pos.push(d.x, d.y, d.z);
           uv.push(i / G, j / G);
           if (i < G && j < G) { const q = j * (G + 1) + i; idx.push(q, q + G + 1, q + 1, q + 1, q + G + 1, q + G + 2); } // face tournée vers l'extérieur
@@ -1117,7 +1191,7 @@
       flData.needsUpdate = true;
     }
 
-    // Image de densité (demi-résolution) → image du feu (résolution CSS) → plaquée sur l'écran
+    // Image de densité (résolution CSS) → image du feu (résolution de l'écran) → plaquée sur l'écran
     const rtOpts = { depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
     const densRT = new THREE.WebGLRenderTarget(1, 1, rtOpts);
     const fireRT = new THREE.WebGLRenderTarget(1, 1, rtOpts);
@@ -2166,10 +2240,11 @@
         const gl = renderer.getContext(), range = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE);
         const maxSize = range ? range[1] : 256;
         for (const m of [densMat, sparkMat, smokeMat]) m.uniforms.maxSize.value = maxSize;
-        const fr = Math.min(1, renderer.getPixelRatio());
-        densRT.setSize(Math.max(1, Math.round(W * 0.5)), Math.max(1, Math.round(H * 0.5)));
-        fireRT.setSize(Math.max(1, Math.round(W * fr)), Math.max(1, Math.round(H * fr)));
-        fxRT.setSize(Math.max(1, Math.round(W * fr)), Math.max(1, Math.round(H * fr)));
+        // Feu à la résolution de l'écran (en basse résolution, ses contours paraissaient pixellisés)
+        const pr = renderer.getPixelRatio(), fx = Math.min(pr, 1.5);
+        densRT.setSize(Math.max(1, Math.round(W)), Math.max(1, Math.round(H)));
+        fireRT.setSize(Math.max(1, Math.round(W * pr)), Math.max(1, Math.round(H * pr)));
+        fxRT.setSize(Math.max(1, Math.round(W * fx)), Math.max(1, Math.round(H * fx)));
       }
       hitKey = '';
       kick();
