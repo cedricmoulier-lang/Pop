@@ -559,22 +559,20 @@
         plumage.push({ L, w: 0.075, bend: 0.12, flex: 0.8, pos: new V3(x + 0.02, y + Math.cos(a) * r * 0.92, Math.sin(a) * r * 0.92), rot: new THREE.Euler(a, 0, 0.18) });
       }
     }
-    [0.19, 0.12, 0.05, -0.02, -0.09, -0.16, -0.23].forEach((x, row) => {
-      const c = torsoAt(x), L = 0.15 - row * 0.006;
-      const n = Math.round((TAU * (c.ry + c.rz) / 2) / 0.058);
+    [0.2, 0.15, 0.1, 0.05, 0, -0.05, -0.1, -0.15, -0.2, -0.25].forEach((x, row) => {
+      const c = torsoAt(x), L = 0.115 - row * 0.003;
+      const n = Math.round((TAU * (c.ry + c.rz) / 2) / 0.046);
       for (let i = 0; i < n; i++) {
         const a = -Math.PI + ((i + (row % 2) * 0.5 + rand(-0.22, 0.22)) / n) * TAU;
         const ra = Math.hypot(Math.cos(a) * c.ry, Math.sin(a) * c.rz);
         const b = torsoAt(x - L), rb = Math.hypot(Math.cos(a) * b.ry, Math.sin(a) * b.rz);
         const tilt = Math.atan2(ra - rb, L) + 0.06; // la plume suit la pente du corps, pointe vers lui
-        plumage.push({ L: L * (0.9 + 0.2 * Math.random()), w: 0.085, bend: 0.1, flex: 0.65,
+        plumage.push({ L: L * (0.9 + 0.2 * Math.random()), w: 0.07, bend: 0.04, flex: 0.65,
           pos: new V3(x + rand(-0.012, 0.012), c.y + Math.cos(a) * c.ry * 0.97, Math.sin(a) * c.rz * 0.97), rot: new THREE.Euler(a + rand(-0.05, 0.05), rand(-0.12, 0.12), tilt) });
       }
     });
     torso.add(mergeFeathers(plumage, MAT.bodyCovert));
     anchors.push(anchor(body, -0.05, 0.13, 0, 1), anchor(body, -0.2, 0.08, 0, 1), anchor(body, 0.15, -0.12, 0, 0.9));
-    flameAt(body, -0.08, 0.12, 0.03, 1, 0.2);
-    flameAt(body, -0.22, 0.07, -0.03, 1, 0.18);
 
     // Tête de rapace : crâne allongé et plat, joues pleines, arcades saillantes, gros bec crochu
     const headTex = velvetPair(256, 256, ramp([[0, [150, 30, 24]], [0.3, [208, 68, 28]], [0.55, [238, 140, 50]], [0.8, [248, 196, 108]], [1, [252, 226, 166]]]), false);
@@ -718,7 +716,7 @@
         const mc = d.dot(M_DIR);
         if (mc > 0 && (Math.atan2(d.dot(M_SIDE), mc) / 0.52) ** 2 + (Math.atan2(d.dot(M_UP), mc) / 0.44) ** 2 < 1) continue; // le M
         const r = skullR(d), back = smooth((0.6 - d.x) / 1.2);
-        let L = 0.042 + 0.03 * back;
+        let L = 0.036 + 0.026 * back;
         // couleur selon la région
         const up = smooth((d.y + 0.2) / 0.8);
         let tint = [lerp(gold[0], crim[0], up), lerp(gold[1], crim[1], up), lerp(gold[2], crim[2], up)];
@@ -729,12 +727,11 @@
         tip.set(-1, 0, 0).addScaledVector(d, d.x);
         if (tip.lengthSq() < 0.04) tip.set(0, -1, 0).addScaledVector(d, -d.y);
         tip.normalize();
-        const tilt = Math.atan(L / (2 * r));
-        nrm.copy(d).multiplyScalar(Math.cos(tilt)).addScaledVector(tip, -Math.sin(tilt));
-        tip.multiplyScalar(Math.cos(tilt)).addScaledVector(d, -Math.sin(tilt));
+        nrm.copy(d);
         const X = tip.clone().negate(), Y = nrm.clone(), Z = new V3().crossVectors(X, Y);
         const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
-        items.push({ L, w: 0.036 + 0.01 * back, bend: 0, flex: 0.3, pos: d.clone().multiplyScalar(r * 0.985), q, tint });
+        // courbée comme le crâne (la pointe retombe de L²/2r) : elle se couche au lieu de dépasser
+        items.push({ L, w: 0.036 + 0.01 * back, bend: -L / (2 * r), flex: 0.3, pos: d.clone().multiplyScalar(r * 0.985), q, tint });
       }
       head.add(mergeFeathers(items, MAT.headFeather));
     }
@@ -789,13 +786,13 @@
 
     // Aigrette : longues plumes couchées vers l'arrière, comme une crinière qui flotte
     const crest = [];
-    for (let i = 0; i < 9; i++) {
-      const k = (i - 4) / 4;
-      const L = 0.4 - Math.abs(k) * 0.12;
-      const m = featherMesh(MAT.crest, L, 0.085, 0.32, 1.3);
-      m.position.set(-0.02, 0.055 - Math.abs(k) * 0.012, k * 0.04);
+    for (let i = 0; i < 11; i++) {
+      const k = (i - 5) / 5;
+      const L = 0.36 - Math.abs(k) * 0.1 + rand(-0.02, 0.02);
+      const m = featherMesh(MAT.crest, L, 0.07, 0.42, 1.4);
+      m.position.set(-0.025, 0.052 - Math.abs(k) * 0.012, k * 0.034);
       m.rotation.order = 'ZYX';
-      m.rotation.set(1.35 + k * 0.2, k * 0.22, -(0.16 + 0.1 * Math.abs(k)));
+      m.rotation.set(1.45 + k * 0.12, k * 0.13, -(0.1 + 0.06 * Math.abs(k)));
       head.add(m);
       crest.push({ m, k, base: m.rotation.z });
     }
@@ -844,13 +841,12 @@
         const L = lerp(0.42, 0.6, r) * (i === 9 ? 0.92 : 1);
         const m = add(wrist, MAT.primary, L, 0.085, 0, 0.0014 * (10 - i), 0.02 + i * 0.026, lerp(0.42, 1.42, r ** 0.9), 1.5, 0.1, 1);
         if (i >= 5) tips.push(anchor(m, -L, 0, 0, 0.8));
-        if (i % 2 === 1) flameAt(m, -L * 0.85, 0, 0, 0.85, 0.2);
+        if (i % 3 === 2) flameAt(m, -L * 0.85, 0, 0, 0.8, 0.14);
       }
       // Rémiges secondaires, sur l'avant-bras
       for (let i = 0; i < 12; i++) {
         const r = i / 11;
-        const sec = add(elbow, MAT.secondary, 0.34, 0.1, -0.005, 0.016 + 0.0013 * (12 - i), 0.012 + i * 0.026, lerp(0.05, 0.38, r), -1.45, 0.06, 0.8);
-        if (i % 3 === 1) flameAt(sec, -0.3, 0, 0, 0.9, 0.17);
+        add(elbow, MAT.secondary, 0.34, 0.1, -0.005, 0.016 + 0.0013 * (12 - i), 0.012 + i * 0.026, lerp(0.05, 0.38, r), -1.45, 0.06, 0.8);
       }
       // Tertiaires, près du corps
       for (let i = 0; i < 4; i++) add(shoulder, MAT.secondary, 0.3, 0.1, -0.01, 0.034 + 0.0013 * i, 0.05 + i * 0.055, -0.12, 0.55, 0.05, 0.7);
@@ -894,7 +890,7 @@
       tail.add(m);
       tailFeathers.push({ m, k, i });
       anchors.push(anchor(m, -L, 0, 0, 0.75));
-      if (i % 3 === 1) flameAt(m, -L * 0.8, 0, 0, 0.8, 0.22);
+      if (i % 4 === 1) flameAt(m, -L * 0.8, 0, 0, 0.75, 0.15);
     }
     // Longues plumes : un squelette « au repos » accroché à la queue sert de cible ; une chaîne simulée
     // (inertie, ressorts plus souples vers le bout, gravité, résistance de l'air) le suit avec du retard,
@@ -931,7 +927,7 @@
       mesh.frustumCulled = false;
       const tipFx = anchor(loose, 0, 0, 0, 0.7);
       anchors.push(tipFx);
-      const flame = flameAt(loose, 0, 0, 0, 0.75, 0.24);
+      const flame = flameAt(loose, 0, 0, 0, 0.7, 0.16);
       const vecs = () => Array.from({ length: N }, () => new V3());
       plumes.push({ segs, tip, j, SL, mesh, geo, tipFx, flame, vane: 1.25 + j * 0.15, p: vecs(), v: vecs(), tgt: vecs(), prev: vecs(), ready: false });
     }
@@ -1295,10 +1291,10 @@
           float n = fbm(p * 2.4 + vec2(0.0, -time * 1.2));
           float rr = r + (n - 0.5) * 0.4 + (n2 - 0.5) * 0.12;
           float Ro = 2.0 * (1.0 - exp(-k * 2.6));       // bord extérieur de l'anneau
-          float Ri = Ro - 0.08 - 0.3 * exp(-k * 3.0);    // bord intérieur : la page réapparaît derrière
-          float fade = 1.0 - smoothstep(0.35, 0.75, k);
+          float Ri = Ro - 0.05 - 0.14 * exp(-k * 3.0);   // bord intérieur : la page réapparaît derrière
+          float fade = 1.0 - smoothstep(0.25, 0.6, k);
           float ringF = smoothstep(Ro, Ro - 0.12, rr) * smoothstep(Ri - 0.04, Ri + 0.06, rr);
-          float I = ringF * (0.35 + 1.1 * tn) * fade - 0.12;
+          float I = ringF * (0.25 + 0.9 * tn) * fade - 0.12;
           float a = smoothstep(0.0, 0.4, I) * 0.92;
           vec4 c = vec4(fireColor(clamp(I * 1.05, 0.0, 1.0)) * a, a);
           // Liseré de braises et trace roussie, juste derrière l'anneau
@@ -1386,6 +1382,7 @@
       headYaw: 0, headPitch: 0, beak: 0, visible: true, burstPos: new V3(), pillar: false,
       tailSw: { x: 0, vx: 0, y: 0, vy: 0, z: 0, vz: 0 }, prevVy: 0, prevPitch: 0.8,
       air: 0, wingBend: 0, prevFlap: 0, crestSw: { p: 0, v: 0 }, prevHeadPitch: 0, prevHeadYaw: 0,
+      gaze: 0, gazeT: 0, nextGaze: 2.5, gazeF: new V3(1, 0, 0), gazeU: new V3(0, 1, 0),
     };
     const fxList = [];
 
@@ -1776,7 +1773,7 @@
       const n = 120 * quality;
       for (let i = 0; i < n; i++) {
         const a = Math.random() * TAU, v = rand(0.8, 2.2) * Math.max(W, H), r0 = rand(0, 0.2) * Math.min(W, H);
-        const flame = i % 4 === 0;
+        const flame = i % 6 === 0;
         spawn(fire, flame ? FLAME : SPARK, Math.cos(a) * r0, Math.sin(a) * r0, D * 0.3, Math.cos(a) * v, Math.sin(a) * v, 0,
           rand(0.3, 0.55), flame ? S * rand(0.3, 0.55) : S * rand(0.05, 0.1), rand(0.85, 1));
       }
@@ -1875,6 +1872,7 @@
     // Aile repliée : rotation de l'épaule, écart au corps, hauteur de l'attache
     // (au-delà de la verticale, le bas de l'aile rentre vers le corps : elle épouse le flanc)
     const FOLD = { flap: -1.85, z: 0.105, y: 0.05, sweep: -1.05 };
+    const tmpGz = new V3(), tmpGy = new V3(), gazeM = new THREE.Matrix4(), gazeQ = new THREE.Quaternion();
     function applyPose() {
       bird.scale.setScalar(S);
       bird.position.copy(st.pos);
@@ -1941,6 +1939,11 @@
       }
       // Tête, bec, yeux, aigrette
       head.rotation.set(0, st.headYaw, st.headPitch);
+      if (st.gaze > 0.001) {
+        const X = st.gazeF, Zv = tmpGz.crossVectors(X, st.gazeU).normalize(), Y = tmpGy.crossVectors(Zv, X);
+        gazeQ.setFromRotationMatrix(gazeM.makeBasis(X, Y, Zv));
+        head.quaternion.slerp(gazeQ, st.gaze);
+      }
       jaw.rotation.z = -0.35 * st.beak;
       const blink = st.blinkT > 0 ? 0.12 : 1;
       for (const e of eyes) e.scale.set(1, blink, 1);
@@ -1980,9 +1983,10 @@
       const open = 1 - st.fold;
       const target = open * (clamp(-0.018 * flapVel, -0.32, 0.32) + 0.1 * st.glide + (st.state === 'pass' ? 0.06 : 0));
       st.wingBend += (target - st.wingBend) * Math.min(1, dt * 16);
-      const hp = (st.headPitch - st.prevHeadPitch) / dt, hy = (st.headYaw - st.prevHeadYaw) / dt;
-      st.prevHeadPitch = st.headPitch;
-      st.prevHeadYaw = st.headYaw;
+      const hpN = st.headPitch, hyN = st.headYaw + st.gaze * 1.2; // le coup de tête vers nous fait aussi fouetter l'aigrette
+      const hp = (hpN - st.prevHeadPitch) / dt, hy = (hyN - st.prevHeadYaw) / dt;
+      st.prevHeadPitch = hpN;
+      st.prevHeadYaw = hyN;
       const cs = st.crestSw, k = 90, c = 2 * 0.2 * Math.sqrt(k);
       const ct = clamp(0.05 * hp + 0.04 * hy - (st.vel.y - st.prevVy) / (60 * S), -0.35, 0.35) - 0.06 * st.air;
       cs.v += (k * (ct - cs.p) - c * cs.v) * dt;
@@ -2051,11 +2055,43 @@
       }
     }
 
+    /* ---------- Regard ---------- */
+    // Il tourne la tête vers nous : régulièrement quand il est posé, d'un bref coup d'œil en vol, et en
+    // continu au centre de l'écran ou quand il fonce sur nous. Un coup de tête rapide, comme les rapaces,
+    // un clignement, puis il nous fixe un moment. Le curseur garde la priorité quand on le bouge.
+    // Direction de la caméra et verticale du monde, dans le repère du corps : la tête nous vise en restant
+    // droite (sinon, posé, corps incliné, elle pivotait autour d'un axe penché et se couchait sur le côté)
+    const camLocal = new V3(), invBody = new THREE.Matrix4(), bodyQ = new THREE.Quaternion();
+    function viewerAngles(lim) {
+      bird.updateMatrixWorld(true);
+      invBody.copy(body.matrixWorld).invert();
+      camLocal.set(0, 0, D).applyMatrix4(invBody).sub(head.position).normalize();
+      const yaw = clamp(Math.atan2(-camLocal.z, camLocal.x), -lim, lim), el = clamp(Math.asin(clamp(camLocal.y, -1, 1)), -0.7, 0.7);
+      st.gazeF.set(Math.cos(el) * Math.cos(yaw), Math.sin(el), -Math.cos(el) * Math.sin(yaw));
+      body.getWorldQuaternion(bodyQ);
+      st.gazeU.set(0, 1, 0).applyQuaternion(bodyQ.invert());
+    }
+    function gaze(dt) {
+      const perched = st.state === 'perch';
+      const facing = st.state === 'hover' || (st.state === 'pass' && st.passT > P_TURN);
+      const cursorBusy = time - pointer.moved < 2;
+      st.nextGaze -= dt;
+      if (st.gazeT > 0) st.gazeT -= dt;
+      else if (st.nextGaze <= 0 && (perched || st.state === 'fly') && !cursorBusy) {
+        st.gazeT = perched ? rand(1.6, 3.2) : rand(0.6, 1.1);
+        st.nextGaze = rand(4, 8);
+        st.blinkT = 0.13;
+      }
+      const want = st.visible && !reduce.matches && (facing || (st.gazeT > 0 && !cursorBusy)) ? 1 : 0;
+      st.gaze = ease(st.gaze, want, dt, want ? 11 : 5);
+      if (st.gaze > 0.001) viewerAngles(perched || facing ? 1.55 : 0.9);
+    }
+
     /* ---------- Boucle ---------- */
     function emit(dt) {
       if (reduce.matches || !st.visible) return;
       const flying = st.state !== 'perch';
-      const rate = (flying ? 900 : 320) * quality;
+      const rate = (flying ? 240 : 90) * quality; // des volutes discrètes, pas un brasier
       let n = rate * dt;
       const z = st.pos.z;
       const persp = Math.min(2.5, D / Math.max(200, D - z));
@@ -2066,7 +2102,7 @@
         a.getWorldPosition(tmpV);
         spawn(fire, FLAME, tmpV.x + rand(-1, 1) * 0.02 * S, tmpV.y + rand(-1, 1) * 0.02 * S, tmpV.z,
           st.vel.x * 0.12 + rand(-0.15, 0.15) * S, st.vel.y * 0.12 + rand(0.1, 0.4) * S, st.vel.z * 0.12,
-          rand(0.22, 0.5), S * rand(0.24, 0.4) * fireBoost / persp * Math.min(persp, 1.6), clamp(a.userData.heat * rand(0.85, 1.05), 0, 1));
+          rand(0.14, 0.3), S * rand(0.2, 0.3) * fireBoost / persp * Math.min(persp, 1.6), clamp(a.userData.heat * rand(0.85, 1.05), 0, 1));
       }
       if (Math.random() < (flying ? 20 : 8) * dt) {
         const a = anchors[(Math.random() * anchors.length) | 0];
@@ -2091,6 +2127,7 @@
         if (st.timer < 0.45 && !st.pillar) { st.pillar = true; fxList.push({ k: 'column', life: 0, max: 0.6 }); }
         if (st.timer <= 0) reborn();
       }
+      gaze(dt);
       featherDynamics(dt);
       tailDynamics(dt);
       applyPose();
@@ -2189,7 +2226,7 @@
       for (const p of plumes) p.mesh.visible = st.visible;
       centerMark.getWorldPosition(tmpV);
       glow.position.copy(tmpV);
-      glow.material.opacity = st.visible ? 0.24 + 0.04 * Math.sin(time * 9) : 0;
+      glow.material.opacity = st.visible ? 0.12 + 0.02 * Math.sin(time * 9) : 0;
       glow.scale.setScalar(2.3 * S * (0.7 + 0.3 * fireBoost));
       // Secousse : la caméra tremble (la page, elle, ne bouge pas)
       const ox = shake * (0.6 * Math.sin(time * 71) + 0.4 * Math.sin(time * 43 + 1));
@@ -2279,7 +2316,10 @@
       sc.near = 2 * S;
       sc.far = 10 * S;
       sc.updateProjectionMatrix();
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      // sur un écran standard, on calcule 1,5 pixel par pixel affiché : contours bien plus lisses
+      let pr = Math.min(2, Math.max(1.5, window.devicePixelRatio || 1));
+      while (pr > 1 && W * H * pr * pr > 5e6) pr -= 0.25;
+      renderer.setPixelRatio(pr);
       renderer.setSize(W, H, false);
       {
         const gl = renderer.getContext(), range = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE);
